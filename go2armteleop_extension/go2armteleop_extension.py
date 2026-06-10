@@ -20,14 +20,14 @@ import os
 import omni.ext
 from isaacsim.examples.browser import get_instance as get_browser_instance
 from isaacsim.examples.interactive.base_sample import BaseSampleUITemplate
-from go2armteleop_example import Go2ArmExample
+from go2armteleop import Go2ArmExample
 
 
 class Go2ArmExampleExtension(omni.ext.IExt):
     """Extension entry point. Registers the Go2-Arm sample in the Isaac Sim Examples Browser."""
 
     def on_startup(self, ext_id: str):
-        self.example_name = "Go2 Arm Teleop"
+        self.example_name = "Go2 Arm Teleop v1"
         self.category = "A"
 
         overview = ("This Example shows a Unitree Go2 Robot with OpenManipulator-X arm "

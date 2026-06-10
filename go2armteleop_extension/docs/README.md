@@ -1,6 +1,6 @@
 # Go2 with Arm Teleoperation Extension
 
-An Isaac Sim extension for teleoperating a **Unitree Go2** quadruped robot equipped with an **OpenManipulator-X** arm using keyboard commands and a trained RL locomotion policy.
+An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot equipped with an **OpenManipulator-X** arm using keyboard commands and a trained RL locomotion policy.
 
 ## Features
 
@@ -15,8 +15,9 @@ An Isaac Sim extension for teleoperating a **Unitree Go2** quadruped robot equip
 
 - **Isaac Sim** 5.1+ installed
 - **Isaac Sim ROS2 Bridge extension** enabled (`isaacsim.ros2.bridge`)
-- A trained Go2 policy file (`.pt` + `.yaml`) — see **Configuring the Policy** below
 - **OpenManipulator-X** USD file (`open_manipulator_x.usd`) — see **Configuring the Arm** below
+
+> **Policy weights** are bundled with the extension in `data/policy/`. To use a custom policy, see **Configuring the Policy** below.
 
 ## Installation
 
@@ -61,7 +62,7 @@ Start Isaac Sim with the extension enabled:
 ```bash
 ./isaac-sim.sh -v \
   --ext-folder /home/gavin/go2withArmExtension \
-  --exts/go2_with_arm.enable=1
+  --exts/go2armteleop_extension.enable=1
 ```
 
 Or via environment variable:
@@ -75,18 +76,16 @@ Then enable it in the Extension Manager as described above.
 
 ## Configuring the Policy
 
-Edit `go2_with_arm/policy/go2withpitch.py` and update the default policy paths in `__init__`:
+Policy weights (`.pt`) and environment config (`.yaml`) are bundled with the extension in the `data/policy/` directory. To use a custom policy, set the paths in `go2armteleop.py` (`Go2ArmExample.__init__`):
 
 ```python
-self.load_policy(
-    "/path/to/your/policy.pt",       # Trained policy weights
-    "/path/to/your/env.yaml",        # Policy environment config
-)
+self.policy_path = "/path/to/your/policy.pt"       # Trained policy weights
+self.policy_config_path = "/path/to/your/env.yaml"  # Policy environment config
 ```
 
 ## Configuring the Arm
 
-Edit `go2_with_arm/sample/go2armteleop_example.py` in the `__init__` method:
+Edit `go2armteleop.py` (`Go2ArmExample.__init__`, ~line 110):
 
 ```python
 self.arm_usd_path = "/path/to/open_manipulator_x.usd"   # Path to your OpenManipulator-X USD
@@ -96,7 +95,7 @@ self.arm_position = np.array([1.5, 0.0, 0.0])           # Position of arm on the
 ## Keyboard Controls
 
 | Key / Numpad | Action          |
-|-------------|-----------------|
+|------|-------|
 | Numpad 8 / Up    | Move Forward    |
 | Numpad 2 / Down  | Move Reverse    |
 | Numpad 4 / Left  | Strafe Left     |
@@ -105,8 +104,8 @@ self.arm_position = np.array([1.5, 0.0, 0.0])           # Position of arm on the
 | Numpad 9 / M     | Spin Clockwise      |
 | A / a            | Pitch Up            |
 | Z / z            | Pitch Down          |
-| C / c            | Roll Left           |
-| X / x            | Roll Right          |
+| C / c            | Roll Left         |
+| X / x            | Roll Right        |
 
 Hold a key to increase the command velocity; release to stop. Commands accumulate while keys are held.
 
@@ -114,23 +113,29 @@ Hold a key to increase the command velocity; release to stop. Commands accumulat
 
 ```
 go2withArmExtension/
-├── extension.toml          # Extension manifest (metadata, dependencies, modules)
+├── config/
+│   └── extension.toml        # Extension manifest (metadata, dependencies, modules)
 ├── data/
-│   └── preview.png         # Preview image for the extension catalog
+│   ├── preview.png           # Preview image for the extension catalog
+│   └── policy/
+│       ├── policy.pt         # Bundled Go2 locomotion policy weights
+│       └── env.yaml          # Bundled policy environment config
 ├── docs/
-│   └── README.md           # This file
-├── go2_with_arm/
-│   ├── __init__.py         # Package entry point
-│   ├── policy/
-│   │   ├── __init__.py
-│   │   └── go2withpitch.py # Go2 RL policy controller
-│   └── sample/
+│   ├── Overview.md           # Detailed documentation
+│   └── CHANGELOG.md          # Version history
+├── go2armteleop_extension/
+│   ├── __init__.py           # Package entry point
+│   ├── go2armteleop.py       # Interactive sample (orchestration, keyboard, lifecycle)
+│   ├── go2armteleop_extension.py   # Extension wrapper (Examples Browser registration)
+│   ├── scene.py              # Scene objects: ground, Go2 robot, arm, LiDAR, cameras
+│   ├── cameras.py            # Camera setup and viewport assignment
+│   ├── omnigraphs.py         # ROS2 bridge OmniGraph creation
+│   └── policy/
 │       ├── __init__.py
-│       ├── go2armteleop_example.py   # Interactive sample (scene setup, cameras, LiDAR, graphs)
-│       └── go2armteleop_extension.py # Extension wrapper (registration with Examples Browser)
+│       └── go2withpitch.py   # Go2 RL policy controller
 └── LICENSE
 ```
 
 ## License
 
-Apache 2.0 — see [LICENSE](../LICENSE) file.
+Apache 2.0 — see [LICENSE](LICENSE) file.

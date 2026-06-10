@@ -15,6 +15,7 @@
 
 """Policy controller for the Go2 quadruped with flat terrain locomotion."""
 
+import os
 from typing import Optional
 
 import numpy as np
@@ -22,6 +23,11 @@ from isaacsim.core.utils.rotations import quat_to_rot_matrix
 from isaacsim.core.utils.types import ArticulationAction
 from isaacsim.robot.policy.examples.controllers import PolicyController
 from isaacsim.storage.native import get_assets_root_path
+
+
+def _get_extension_root() -> str:
+    """Return the root directory of the go2armteleop_extension package."""
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 class Go2withPitchFlatTerrainPolicy(PolicyController):
@@ -52,7 +58,9 @@ class Go2withPitchFlatTerrainPolicy(PolicyController):
             position: Initial position of the robot.
             orientation: Initial orientation of the robot.
             policy_path: Path to the trained policy .pt file.
+                Defaults to the bundled policy in the extension's data/policy/ directory.
             policy_config_path: Path to the policy environment config .yaml file.
+                Defaults to the bundled config in the extension's data/policy/ directory.
         """
         assets_root_path = get_assets_root_path()
         if usd_path is None:
@@ -60,11 +68,13 @@ class Go2withPitchFlatTerrainPolicy(PolicyController):
 
         super().__init__(name, prim_path, root_path, usd_path, position, orientation)
 
-        # Default policy files — update these to point to your trained policy
+        # Policy defaults — bundled with the extension in data/policy/
         if policy_path is None:
-            policy_path = "/home/gavin/isaacSimData/go2Policy/gavin6Jun26/policy.pt"
+            extension_root = _get_extension_root()
+            policy_path = os.path.join(extension_root, "data", "policy", "policy.pt")
         if policy_config_path is None:
-            policy_config_path = "/home/gavin/isaacSimData/go2Policy/gavin6Jun26/env.yaml"
+            extension_root = _get_extension_root()
+            policy_config_path = os.path.join(extension_root, "data", "policy", "env.yaml")
 
         self.load_policy(policy_path, policy_config_path)
 

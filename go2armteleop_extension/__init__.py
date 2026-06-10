@@ -20,7 +20,7 @@ controlled via a reinforcement learning policy with keyboard teleoperation input
 """
 
 from .policy.go2withpitch import Go2withPitchFlatTerrainPolicy
-from .go2armteleop_example import Go2ArmExample
+from .go2armteleop import Go2ArmExample
 
 __all__ = [
     "Go2withPitchFlatTerrainPolicy",

@@ -1,6 +1,6 @@
 # Unitree Go2 with Arm Teleoperation Extension
 
-An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot with an **OpenManipulator-X** arm using keyboard commands, a leader robot and an XBox controller, together with a trained RL locomotion policy.
+An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot with an **OpenManipulator-X** arm using keyboard commands, together with a trained RL locomotion policy.
 
 ![Extension Preview](data/preview.png)
 
@@ -18,8 +18,7 @@ An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot 
 
 - Isaac Sim 5.1+
 - `isaacsim.ros2.bridge` extension enabled
-- A trained Go2 policy file (`.pt` weights + `.yaml` config)
-- `open_manipulator_x.usd` asset
+- `open_manipulator_x.usd` asset (configure in `go2armteleop.py` or edit the path below)
 
 ## Installation
 
@@ -44,23 +43,23 @@ In Isaac Sim go to **Edit -> Preferences -> Extensions -> Extension Search Path*
 **CLI launch:**
 
 ```bash
-./isaac-sim.sh -v --ext-folder /home/gavin/go2withArmExtension --exts/go2_with_arm.enable=1
+./isaac-sim.sh -v --ext-folder /home/gavin/go2withArmExtension --exts/go2armteleop_extension.enable=1
 ```
 
 ## Configuration
 
 ### Policy weights
 
-In `go2armteleop_extension/policy/go2withpitch.py` (`__init__`, ~line 64):
+Policy weights (`.pt`) and environment config (`.yaml`) are bundled with the extension in the `data/policy/` directory. To use a custom policy, set the paths in `go2armteleop.py` (`Go2ArmExample.__init__`):
 
 ```python
-policy_path = "/path/to/your/policy.pt"
-policy_config_path = "/path/to/your/env.yaml"
+self.policy_path = "/path/to/your/policy.pt"
+self.policy_config_path = "/path/to/your/env.yaml"
 ```
 
 ### Arm USD and mount position
 
-In `go2armteleop_extension/go2armteleop_example.py` (`Go2ArmExample.__init__`, ~line 98):
+In `go2armteleop.py` (`Go2ArmExample.__init__`, ~line 110):
 
 ```python
 self.arm_usd_path = "/path/to/open_manipulator_x.usd"
@@ -70,7 +69,7 @@ self.arm_position = np.array([1.5, 0.0, 0.0])   # position on Go2 base
 ## Keyboard Controls
 
 | Key / Numpad | Action          |
-|--------------|-----------------|
+|---------|-------|
 | Numpad 8 / Up    | Move Forward    |
 | Numpad 2 / Down  | Move Reverse    |
 | Numpad 4 / Left  | Strafe Left     |
@@ -80,7 +79,7 @@ self.arm_position = np.array([1.5, 0.0, 0.0])   # position on Go2 base
 | A / a            | Pitch Up            |
 | Z / z            | Pitch Down          |
 | C / c            | Roll Left           |
-| X / x            | Roll Right          |
+| X / x            | Roll Right        |
 
 Hold a key to accumulate command velocity; release to stop. Commands accumulate while keys are held.
 
@@ -92,9 +91,15 @@ go2armteleop_extension/
 |   +-- extension.toml         # Isaac Sim extension manifest
 +-- data/
 |   +-- preview.png            # Extension catalog preview
+|   +-- policy/
+|       +-- policy.pt          # Bundled Go2 locomotion policy weights
+|       +-- env.yaml           # Bundled policy environment config
 +-- __init__.py                # Package entry point
-+-- go2armteleop_example.py    # Interactive sample (scene, cameras, LiDAR, graphs)
++-- go2armteleop.py            # Interactive sample (orchestration, keyboard, lifecycle)
 +-- go2armteleop_extension.py  # Extension wrapper (Examples Browser registration)
++-- scene.py                   # Scene objects: ground, Go2 robot, arm, LiDAR, cameras
++-- cameras.py                 # Camera setup and viewport assignment
++-- omnigraphs.py              # ROS2 bridge OmniGraph creation
 +-- policy/
     +-- __init__.py
     +-- go2withpitch.py        # Go2withPitchFlatTerrainPolicy (RL policy)
@@ -110,7 +115,7 @@ go2armteleop_extension/
 ### OmniGraphs
 
 | Graph | Purpose |
-|-------|---------|
+|-------|-------|
 | `/CMDVELGraph` | Subscribe to `cmd_vel` (`geometry_msgs/Twist`) |
 | `/ArmGraph` | Subscribe to `joint_states`, drive arm articulation |
 | `/LIDARGraph3D` | RTX LiDAR point cloud -> ROS2 |

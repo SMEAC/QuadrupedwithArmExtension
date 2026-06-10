@@ -1,11 +1,16 @@
 [package]
-version = "1.0.0"
+version = "1.1.0"
 category = "Simulation"
 title = "Go2 with Arm Teleoperation"
 description = "Extension for teleoperating a Unitree Go2 quadruped robot with an OpenManipulator-X arm using keyboard commands and RL policy inference in Isaac Sim."
 keywords = "isaac robot quadruped go2 arm teleoperation policy"
+authors = ["Gavin Kane, gavin.kane@hs-emden-leer.de"]
 license = "Apache-2.0"
-preview = "data/preview.png"
+readme = "docs/Overview.md"
+icon = "data/preview.png"
+preview_image = "data/preview.png"
+changelog = "docs/CHANGELOG.md"
+support_level = "User"
 
 [dependencies]
 "isaacsim.examples.browser" = {}
