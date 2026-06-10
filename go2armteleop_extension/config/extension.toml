@@ -1,0 +1,23 @@
+[package]
+version = "1.0.0"
+category = "Simulation"
+title = "Go2 with Arm Teleoperation"
+description = "Extension for teleoperating a Unitree Go2 quadruped robot with an OpenManipulator-X arm using keyboard commands and RL policy inference in Isaac Sim."
+keywords = "isaac robot quadruped go2 arm teleoperation policy"
+license = "Apache-2.0"
+preview = "data/preview.png"
+
+[dependencies]
+"isaacsim.examples.browser" = {}
+"isaacsim.examples.interactive" = {}
+"isaacsim.robot.policy.examples" = {}
+"isaacsim.ros2.bridge" = {}
+"isaacsim.sensors.rtx" = {}
+"isaacsim.sensors.physics" = {}
+"isaacsim.gui.components" = {}
+"omni.kit.viewport.utility" = {}
+"omni.isaac.dynamic_control" = {}
+
+
+[[python.module]]
+name = "go2armteleop_extension"
