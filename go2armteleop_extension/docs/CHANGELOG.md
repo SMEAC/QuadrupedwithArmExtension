@@ -17,7 +17,12 @@
 - `data/policy/policy.pt` — bundled Go2 locomotion policy weights
 - `data/policy/env.yaml` — bundled policy environment configuration
 
+### Added
+
+- **Tennis ball** — bundled USD asset (`resource/Tennis_ball_01.usda`) loaded into the scene at ``[0.0, 1.0, 0.5]`` via a new ``create_ball()`` function in ``scene.py``
+
 ### Updated
+
 
 - `config/extension.toml` — revision bumped to 1.1.0, new changelog entry
 - `README.md` — updated architecture diagram and configuration docs

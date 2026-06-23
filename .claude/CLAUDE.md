@@ -28,6 +28,7 @@ Isaac Sim discovers extensions by scanning subdirectories for `extension.toml`, 
     │       └── env.yaml
     ├── docs/
     ├── resource/
+    │   └── Tennis_ball_01.usda      ← Tennis ball asset
     └── __init__.py
 ```
 
@@ -40,8 +41,9 @@ Key Isaac Sim configuration:
 ## Key Configuration (hardcoded paths to update for your environment)
 
 - **Policy weights**: `go2armteleop_extension/policy/go2withpitch.py:72-77` — default `policy_path` and `policy_config_path` resolve relative to the extension's `data/policy/` directory. Override by passing arguments to `Go2withPitchFlatTerrainPolicy.__init__()`.
-- **Arm USD**: `go2armteleop_extension/scene.py:330` — `arm_usd_path` defaults to `/home/gavin/isaacSimData/openManipulator/open_manipulator_x.usd` (pass as argument to `setup_scene()` to override).
-- **Arm position on Go2 base**: `go2armteleop_extension/scene.py:332` — `arm_position` defaults to `[1.5, 0.0, 0.0]` (pass as argument to `setup_scene()` to override).
+- **Arm USD**: `go2armteleop_extension/scene.py:364` — `arm_usd_path` defaults to `/home/gavin/isaacSimData/openManipulator/open_manipulator_x.usd` (pass as argument to `setup_scene()` to override).
+- **Arm position on Go2 base**: `go2armteleop_extension/scene.py:366` — `arm_position` defaults to `[1.5, 0.0, 0.0]` (pass as argument to `setup_scene()` to override).
+- **Tennis ball USD**: `go2armteleop_extension/scene.py:140` — `create_ball()` resolves the relative path `resource/Tennis_ball_01.usda` against the extension root.
 
 ## Architecture
 
@@ -59,10 +61,10 @@ go2armteleop_extension/
                                 #   forwards to policy
                                 # - _sub_keyboard_event(): accumulates commands on key-press,
                                 #   subtracts on key-release
-  scene.py                       # Scene object creation (ground, Go2 robot, arm, LiDAR, cameras)
+  scene.py                       # Scene object creation (ground, Go2 robot, arm, tennis ball, LiDAR, cameras)
                                 # - setup_scene() orchestrates all object creators
                                 # - create_go2_robot(), create_open_manipulator_x(),
-                                #   create_fixed_joint(), create_rtx_lidar(), create_camera_obj()
+                                #   create_ball(), create_fixed_joint(), create_rtx_lidar(), create_camera_obj()
   cameras.py                     # Camera setup and viewport assignment
                                 # - CameraConfig dataclass
                                 # - create_camera(), setup_viewports()

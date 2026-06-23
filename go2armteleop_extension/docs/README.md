@@ -6,6 +6,7 @@ An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot 
 
 - RL-based flat-terrain locomotion policy (trained in Isaac Lab) on a Go2 quadruped
 - OpenManipulator-X arm rigidly attached to the Go2 base via a fixed joint
+- Tennis ball asset (bundled USD) placed in the scene
 - Two cameras: one mounted on the arm wrist, one on the Go2 head
 - RTX LiDAR with ROS2 point cloud output
 - Full ROS2 bridge integration: `cmd_vel`, `joint_states`, odometry, TF, camera feeds, clock
@@ -127,7 +128,7 @@ go2withArmExtension/
 │   ├── __init__.py           # Package entry point
 │   ├── go2armteleop.py       # Interactive sample (orchestration, keyboard, lifecycle)
 │   ├── go2armteleop_extension.py   # Extension wrapper (Examples Browser registration)
-│   ├── scene.py              # Scene objects: ground, Go2 robot, arm, LiDAR, cameras
+│   ├── scene.py              # Scene objects: ground, Go2 robot, arm, tennis ball, LiDAR, cameras
 │   ├── cameras.py            # Camera setup and viewport assignment
 │   ├── omnigraphs.py         # ROS2 bridge OmniGraph creation
 │   └── policy/

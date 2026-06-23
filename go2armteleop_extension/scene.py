@@ -16,12 +16,14 @@
 """Scene object creation for the Go2-Arm teleoperation scene.
 
 This module creates all scene objects: ground plane, Go2 robot with RL policy,
-OpenManipulator-X arm with fixed joint, RTX LiDAR, and range sensor.
+OpenManipulator-X arm with fixed joint, RTX LiDAR, tennis ball, and range sensor.
 Camera objects are returned as raw configuration data to avoid circular imports.
 """
 
+import os
 import numpy as np
 import omni
+import omni.usd
 import omni.kit.commands
 import omni.physx.scripts.utils as physxUtils
 import isaacsim.core.utils.stage as stage_utils
@@ -30,13 +32,32 @@ from isaacsim.sensors.rtx import LidarRtx
 from isaacsim.sensors.physx import _range_sensor
 from omni.isaac.core.articulations import Articulation
 from omni.isaac.sensor import Camera
-from pxr import UsdGeom, Gf, UsdPhysics
+from pxr import UsdGeom, Sdf, Gf, UsdPhysics
 from policy.go2withpitch import Go2withPitchFlatTerrainPolicy
+from isaacsim.core.experimental.prims import RigidPrim
+
 
 
 def _get_extension_root() -> str:
     """Return the root directory of the go2armteleop_extension package."""
     return os.path.dirname(os.path.abspath(__file__))
+
+
+def _find_xformable_prim(prim):
+    """Return the first valid leaf prim that has a ``xformOpOrder`` attribute.
+
+    ``xformOpOrder`` is the stable attribute that signals a USDGeom Xform;
+    it works across all USD versions we target, unlike ``IsXformable()``.
+    """
+    if prim and prim.IsValid():
+        if prim.HasAttribute("xformOpOrder"):
+            return prim
+        for child in prim.GetChildren():
+            child_xform = _find_xformable_prim(child)
+            if child_xform is not None:
+                return child_xform
+        return None
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -118,24 +139,148 @@ def create_open_manipulator_x(
     )
 
 
-def create_fixed_joint(stage, body0_path: str, body1_path: str) -> None:
+def create_ball(
+    stage,
+    ball_prim_path: str = "/World/ball",
+    position: np.ndarray | None = None,
+) -> str:
+    """Load the tennis ball USD into the scene.
+
+    The USD file is resolved relative to the extension root directory
+    via ``_get_extension_root()`` so the function works regardless of
+    the working directory from which Isaac Sim is launched.
+
+    Args:
+        stage: The current USD stage.
+        ball_prim_path: USD prim path for the ball.
+        position: Initial position [x, y, z].
+
+    Returns:
+        The USD prim path of the ball.
+    """
+    if position is None:
+        position = np.array([1.0, 1.0, 1.5])
+
+    # Resolve the relative resource path against the extension root.
+    _ball_usd_rel = "resource/Tennis_ball_01.usda"
+    ball_usd_abs = os.path.join(_get_extension_root(), _ball_usd_rel)
+    print(f"[Go2Arm] Placing Ball")
+    stage_utils.add_reference_to_stage(ball_usd_abs, ball_prim_path)
+    print(f"[Go2Arm] Ball placed")
+    # Apply position to the referenced ball prim if possible.
+    ball_prim = stage.GetPrimAtPath(ball_prim_path)
+    if ball_prim and ball_prim.IsValid():
+        try:
+            xformable_prim = _find_xformable_prim(ball_prim)
+            if xformable_prim is not None:
+                xform = UsdGeom.XformCommonAPI(xformable_prim)
+                xform.SetTranslate(Gf.Vec3d(*position))
+                #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
+                #xform.set_linear_velocity(linear_vel)
+                print(f"[Go2Arm] Ball placed at {ball_prim_path}")
+            else:
+                print(f"[Go2Arm] Warning: no xformable prim found for ball at {ball_prim_path}")
+        except Exception as e:
+            print(f"[Go2Arm] Warning: failed to set ball position: {e}")
+    else:
+        print(f"[Go2Arm] Warning: ball prim not found at {ball_prim_path}")
+    
+    
+    return ball_prim_path
+
+def create_gripper(
+    stage,
+    gripper_prim_path: str = "/World/gripper_left",
+    scale: np.ndarray | None = None,
+) -> str:
+    """Load the gripper USD into the scene.
+
+    The USD file is resolved relative to the extension root directory
+    via ``_get_extension_root()`` so the function works regardless of
+    the working directory from which Isaac Sim is launched.
+
+    Args:
+        stage: The current USD stage.
+        gripper_prim_path: USD prim path for the gripper.
+        scale: Initial scale [x, y, z].
+
+    Returns:
+        The USD prim path of the gripper.
+    """
+    if scale is None:
+        scale = np.array([1.5, 1.5, 1.5])
+
+
+
+    # Resolve the relative resource path against the extension root.
+    _gripper_usd_rel = "resource/Gripper_Ball_v3.usda"
+    gripper_usd_abs = os.path.join(_get_extension_root(), _gripper_usd_rel)
+    print(f"[Go2Arm] Gripper placed")
+    stage_utils.add_reference_to_stage(gripper_usd_abs, gripper_prim_path)
+    print(f"[Go2Arm] Gripper placed")
+    # Apply position to the referenced gripper prim if possible.
+    gripper_prim = stage.GetPrimAtPath(gripper_prim_path)
+    if gripper_prim and gripper_prim.IsValid():
+        try:
+            xformable_prim = _find_xformable_prim(gripper_prim)
+            if xformable_prim is not None:
+                xform = UsdGeom.XformCommonAPI(xformable_prim)
+                xform.SetScale(Gf.Vec3f(*scale))
+                
+            else:
+                print(f"[Go2Arm] Warning: at Scale  {gripper_prim_path}")
+        except Exception as e:
+            print(f"[Go2Arm] Warning: failed to set gripper position: {e}")
+    else:
+        print(f"[Go2Arm] Warning: gripper prim not found at {gripper_prim_path}")
+
+    prim = RigidPrim(gripper_prim_path, masses=[0.001])
+
+    '''
+    child_prim_path = f"{gripper_prim_path}/node_/mesh_"
+    child_prim = stage.GetPrimAtPath(child_prim_path)
+
+    if child_prim.IsValid():
+        # 3. Cast the prim to a UsdGeom.Xformable so we can modify its transform stack
+        xformable = UsdGeom.Xformable(child_prim)
+        
+        # 4. Set the reset flag to True (this clears parent transform inheritance for physics)
+        xformable.SetResetXformStack(True)
+    '''    
+    return gripper_prim_path
+
+def create_fixed_joint(stage, body0_path: str, body1_path: str, offset: np.ndarray, rot: np.ndarray) -> None:
     """Create a fixed joint connecting two body prims.
 
     Args:
         stage: The current USD stage.
         body0_path: USD prim path of the parent body (Go2 base).
         body1_path: USD prim path of the child body (arm world).
+        offset: Translation offset [x, y, z] for the joint.
+        rot: Rotation offset [x, y, z] for the joint.
     """
     joint_prim = physxUtils.createJoint(
         stage, "Fixed",
         stage.GetPrimAtPath(body0_path),
         stage.GetPrimAtPath(body1_path),
     )
+    if offset is None:
+        offset = np.array([0.0, 0.0, 0.0])
+    if rot is None:
+        rot = np.array([0.0, 0.0, 0.0])
+
+    from scipy.spatial.transform import Rotation as R
+
+    quat_scipy = R.from_euler("xyz", rot, degrees=True).as_quat()
+    orientation = np.array([quat_scipy[3], quat_scipy[0], quat_scipy[1], quat_scipy[2]])
+
     if joint_prim is not None:
         physics_joint = UsdPhysics.Joint(joint_prim)
-        physics_joint.GetLocalPos0Attr().Set(Gf.Vec3f([0.2, 0.0, 0.07]))
+        physics_joint.GetLocalPos0Attr().Set(Gf.Vec3f(offset[0], offset[1], offset[2]))
+        physics_joint.GetLocalRot0Attr().Set(Gf.Quatf(orientation[0], orientation[1], orientation[2], orientation[3]))
         print(f"[Go2Arm] Fixed joint created between {body0_path} and {body1_path}")
-
+    joint_path = joint_prim.GetPath()
+    print(f"[Go2Arm] Fixed joint created at {joint_path}")
 
 def create_rtx_lidar(
     prim_path: str = "/World/Go2/radar/lidar3D",
@@ -190,7 +335,7 @@ def create_range_sensor(
         parent=parent_path,
         min_range=min_range,
         max_range=max_range,
-        draw_points=True,
+        draw_points=False,
         draw_lines=False,
         horizontal_fov=360.0,
         vertical_fov=30.0,
@@ -285,6 +430,7 @@ def setup_scene(
     - Ground plane
     - Go2 robot with RL policy
     - OpenManipulator-X arm with fixed joint
+    - Tennis ball
     - Two cameras (arm wrist + Go2 head)
     - RTX LiDAR with range sensor
 
@@ -298,6 +444,7 @@ def setup_scene(
         dict containing references to all created objects with keys:
         - 'go2': Go2withPitchFlatTerrainPolicy instance
         - 'arm': SingleArticulation instance
+        - 'ball': str (USD prim path of the tennis ball)
         - 'camera_arm': Camera instance (arm wrist)
         - 'camera_quadruped': Camera instance (Go2 head)
         - 'lidar': LidarRtx instance
@@ -333,7 +480,25 @@ def setup_scene(
     arm = create_open_manipulator_x(stage, arm_usd_path, arm_prim_path, arm_position)
 
     # Fixed joint connecting arm to Go2 base
-    create_fixed_joint(stage, "/World/Go2/base", "/World/open_manipulator_x/world")
+    create_fixed_joint(stage, "/World/Go2/base", 
+                              "/World/open_manipulator_x/world",
+                              offset=np.array([0.2, 0.0, 0.07]),
+                              rot=np.array([0.0, 0.0, 0.0]))
+
+    gripper_left_prim_path = create_gripper(stage,gripper_prim_path:="/World/gripper_left", scale=np.array([1.5, 1.5, 1.5]))
+    gripper_right_prim_path = create_gripper(stage,gripper_prim_path:="/World/gripper_right", scale=np.array([1.5, 1.5, 1.5]))
+    create_fixed_joint(stage, "/World/open_manipulator_x/gripper_left_link", 
+                              "/World/gripper_left", 
+                              offset=np.array([0.15, 0.045, -0.045]), 
+                              rot=np.array([90.0, 0.0, -90.0]))
+                              #rot=np.array([180.0, 90.0, 90.0]))
+
+    create_fixed_joint(stage, "/World/open_manipulator_x/gripper_right_link", 
+                              "/World/gripper_right", 
+                              offset=np.array([0.15, -0.045, 0.045]), 
+                              rot=np.array([-90.0, 0.0, 90.0]))
+    # Tennis ball
+    ball_prim_path = create_ball(stage, ball_prim_path="/World/ball", position=np.array([2.0, 1.0, 1.5]))
 
     # Arm-mounted camera
     camera_arm = create_camera_obj(
@@ -362,6 +527,7 @@ def setup_scene(
     return {
         "go2": go2,
         "arm": arm,
+        "ball": ball_prim_path,
         "camera_arm": camera_arm,
         "camera_quadruped": camera_quadruped,
         "lidar": lidar,

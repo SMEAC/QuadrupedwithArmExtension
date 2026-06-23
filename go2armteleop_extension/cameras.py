@@ -123,23 +123,18 @@ def setup_viewports(
         viewport2_window: Optional name of the second viewport window
             (default: "Viewport 2").
     """
-    # Assign arm camera to Viewport 1
-    if viewport1_window is None:
-        viewport1_window = get_active_viewport_window()
-    if viewport1_window is not None:
-        viewport = get_active_viewport_and_window(viewport1_window)[0]
-        if viewport:
-            viewport.set_active_camera("/World/open_manipulator_x/link5/Go2Camera")
-        else:
-            print("[Go2Arm] Failed to set Viewport 1 camera")
+    viewport = get_viewport_from_window_name("Viewport")
+    print(f"Got viewport: {viewport}")
+    # Set the viewport to the camera
+    if viewport:
+        viewport.set_active_camera("/World/open_manipulator_x/link5/Go2Camera")
     else:
-        print("[Go2Arm] Failed to get Viewport 1 window")
+        print("Failed to set Viewport 1")   
 
-    # Assign Go2 head camera to Viewport 2
-    if viewport2_window is None:
-        viewport2_window = "Viewport 2"
-    viewport2 = get_viewport_from_window_name(viewport2_window)
+    viewport2 = get_viewport_from_window_name("Viewport 2")
+    print(f"Got viewport: {viewport2}")
+    # Set the viewport to the camera
     if viewport2:
-        viewport2.set_active_camera("/World/Go2/Head_upper/Go2Camera")
+        viewport2.set_active_camera("/World/Go2/Head_upper/Go2Camera")  
     else:
-        print("[Go2Arm] Failed to set Viewport 2 camera")
+        print("Failed to set Viewport 2")

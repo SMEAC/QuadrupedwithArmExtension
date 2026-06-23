@@ -61,6 +61,38 @@ def _create_cmdvel_graph(controller: og.Controller) -> og.Controller:
     return controller
 
 
+def _create_cmdvel_autopilot_pub_graph(controller: og.Controller) -> og.Controller:
+    """Create the cmd_vel_autopilot ROS2 publisher OmniGraph.
+
+    Args:
+        controller: The omni.graph.Controller instance.
+
+    Returns:
+        The controller for chaining (same instance).
+    """
+    keys = og.Controller.Keys
+    controller.edit(
+        {"graph_path": "/CMDVELAutopilotGraph", "evaluator_name": "execution"},
+        {
+            keys.CREATE_NODES: [
+                ("Impulse_autopilot", "omni.graph.action.OnImpulseEvent"),
+                ("ros2_publisher_autopilot", "isaacsim.ros2.bridge.ROS2Publisher"),
+                ("Ros2Context_autopilot", "isaacsim.ros2.bridge.ROS2Context"),
+            ],
+            keys.SET_VALUES: [
+                ("ros2_publisher_autopilot.inputs:messageName", "Twist"),
+                ("ros2_publisher_autopilot.inputs:messagePackage", "geometry_msgs"),
+                ("ros2_publisher_autopilot.inputs:topicName", "cmd_vel_autopilot"),
+            ],
+            keys.CONNECT: [
+                ("Impulse_autopilot.outputs:execOut", "ros2_publisher_autopilot.inputs:execIn"),
+                ("Ros2Context_autopilot.outputs:context", "ros2_publisher_autopilot.inputs:context"),
+            ],
+        },
+    )
+    return controller
+
+
 def _create_arm_graph(controller: og.Controller) -> og.Controller:
     """Create the OpenManipulator-X joint-state subscriber OmniGraph.
 
@@ -79,13 +111,14 @@ def _create_arm_graph(controller: og.Controller) -> og.Controller:
                 ("articulation_controller", "isaacsim.core.nodes.IsaacArticulationController"),
                 ("ROS2ContextArm", "isaacsim.ros2.bridge.ROS2Context"),
                 ("ROS2SubscriberArm", "isaacsim.ros2.bridge.ROS2SubscribeJointState"),
-                ("ToString", "omni.graph.nodes.ToString"),
-                ("print_text", "omni.graph.ui_nodes.PrintText"),
+                ("ROS2PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),       
+                ("arm_isaac_read_simulation_time_clock", "isaacsim.core.nodes.IsaacReadSimulationTime"),
             ],
             keys.SET_VALUES: [
                 ("ROS2SubscriberArm.inputs:topicName", "joint_states"),
-                ("print_text.inputs:toScreen", True),
+                ("ROS2PublishJointState.inputs:topicName", "joint_states_ist"),
                 ("articulation_controller.inputs:targetPrim", "/World/open_manipulator_x/joints/joint1"),
+                ("ROS2PublishJointState.inputs:targetPrim", "/World/open_manipulator_x/joints/joint1"),                
             ],
             keys.CONNECT: [
                 ("ROS2ContextArm.outputs:context", "ROS2SubscriberArm.inputs:context"),
@@ -94,8 +127,10 @@ def _create_arm_graph(controller: og.Controller) -> og.Controller:
                 ("ROS2SubscriberArm.outputs:jointNames", "articulation_controller.inputs:jointNames"),
                 ("ROS2SubscriberArm.outputs:velocityCommand", "articulation_controller.inputs:velocityCommand"),
                 ("ROS2SubscriberArm.outputs:execOut", "articulation_controller.inputs:execIn"),
-                ("ROS2SubscriberArm.outputs:execOut", "print_text.inputs:execIn"),
                 ("OnPlaybackTickArm.outputs:tick", "ROS2SubscriberArm.inputs:execIn"),
+                ("ROS2ContextArm.outputs:context", "ROS2PublishJointState.inputs:context"),
+                ("arm_isaac_read_simulation_time_clock.outputs:simulationTime", "ROS2PublishJointState.inputs:timeStamp"),
+                ("OnPlaybackTickArm.outputs:tick", "ROS2PublishJointState.inputs:execIn"),
             ],
         },
     )
@@ -330,14 +365,15 @@ def setup_omnigraphs(
 ) -> dict:
     """Create all ROS2 bridge OmniGraphs for the Go2-Arm scene.
 
-    This function creates seven OmniGraphs:
+    This function creates eight OmniGraphs:
     1. /CMDVELGraph — cmd_vel subscriber
-    2. /ArmGraph — OpenManipulator-X joint-state subscriber
-    3. /LIDARGraph3D — RTX LiDAR point cloud
-    4. /OdometryGraph — odometry and TF trees
-    5. /CameraArmGraph — arm wrist camera ROS2 feed
-    6. /CameraQuadrupedGraph — Go2 head camera ROS2 feed
-    7. /SimTimeGraph — simulation clock publisher
+    2. /CMDVELAutopilotGraph — cmd_vel_autopilot publisher
+    3. /ArmGraph — OpenManipulator-X joint-state subscriber
+    4. /LIDARGraph3D — RTX LiDAR point cloud
+    5. /OdometryGraph — odometry and TF trees
+    6. /CameraArmGraph — arm wrist camera ROS2 feed
+    7. /CameraQuadrupedGraph — Go2 head camera ROS2 feed
+    8. /SimTimeGraph — simulation clock publisher
 
     Args:
         controller: The omni.graph.Controller instance.
@@ -348,8 +384,9 @@ def setup_omnigraphs(
         dict with metadata including graph output attribute paths
         for accessing cmd_vel data in the physics callback.
     """
-    # Create all 7 graphs
+    # Create all graphs
     _create_cmdvel_graph(controller)
+    _create_cmdvel_autopilot_pub_graph(controller)
     _create_arm_graph(controller)
     _create_lidar_graph(controller)
     _create_odometry_graph(controller)
@@ -364,4 +401,10 @@ def setup_omnigraphs(
         "cmdvel_angular_z": "/CMDVELGraph/ros2_subscriber.outputs:angular:z",
         "cmdvel_angular_y": "/CMDVELGraph/ros2_subscriber.outputs:angular:y",
         "cmdvel_angular_x": "/CMDVELGraph/ros2_subscriber.outputs:angular:x",
+        "cmdvel_autopilot_linear_x": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:linear:x",
+        "cmdvel_autopilot_linear_y": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:linear:y",
+        "cmdvel_autopilot_angular_z": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:angular:z",
+        "cmdvel_autopilot_angular_y": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:angular:y",
+        "cmdvel_autopilot_angular_x": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:angular:x",
+        "cmdvel_autopilot_impulse": "/CMDVELAutopilotGraph/Impulse_autopilot.state:enableImpulse",
     }

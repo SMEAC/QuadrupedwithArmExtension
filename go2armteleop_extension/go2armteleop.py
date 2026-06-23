@@ -41,11 +41,15 @@ if _package_root not in sys.path:
 
 import carb
 import numpy as np
+import math
+
 import omni
+from pxr import UsdGeom, Usd, Gf
 from isaacsim.examples.interactive.base_sample import BaseSample
 from scene import setup_scene
 from cameras import setup_viewports
 from omnigraphs import setup_omnigraphs
+
 
 
 class Go2ArmExample(BaseSample):
@@ -57,7 +61,18 @@ class Go2ArmExample(BaseSample):
         self._world_settings["physics_dt"] = 1.0 / 200.0
         self._world_settings["rendering_dt"] = 4.0 / 200.0
         self._base_command = [0.0, 0.0, 0.0, 0.1, 0.0]
+        self._merged_command = [0.0, 0.0, 0.0, 0.0, 0.0]
+        self._autopilot_command = [0.0, 0.0, 0.0, 0.0, 0.0]
         self._max_command = 0.5
+
+        # Autopilot ball-following parameters
+        self._ball_follow_dist = 0.6
+        self._ball_follow_start = 1.5
+        self._yaw_gain = 0.01
+        self._vx_gain = 0.8
+        self._roll_gain = 1.0
+        self._max_yaw_rate = 1.5
+        self._max_vx = 0.4
 
         # Keyboard-to-command bindings
         self._input_keyboard_mapping = {
@@ -140,16 +155,84 @@ class Go2ArmExample(BaseSample):
 
     def on_physics_step(self, step_size: float) -> None:
         if self._physics_ready:
-            # Merge ROS2 cmd_vel with keyboard base_command
             meta = self._omnigraphs_meta
-            new_cmd = [
+            ros2_cmd = [
                 omni.graph.core.Controller().attribute(meta["cmdvel_linear_x"]).get(),
                 omni.graph.core.Controller().attribute(meta["cmdvel_linear_y"]).get(),
                 omni.graph.core.Controller().attribute(meta["cmdvel_angular_z"]).get(),
                 omni.graph.core.Controller().attribute(meta["cmdvel_angular_y"]).get(),
                 omni.graph.core.Controller().attribute(meta["cmdvel_angular_x"]).get(),
             ]
-            self._merged_command = [x + y for x, y in zip(new_cmd, self._base_command)]
+            #print(f"[Go2Arm] ROS2 cmd_vel: ({ros2_cmd[0]:.3f}, {ros2_cmd[1]:.3f}, {ros2_cmd[2]:.3f}, {ros2_cmd[3]:.3f}, {ros2_cmd[4]:.3f})")
+            if self.autopilot_enabled:
+                self._compute_ball_follow_command()
+
+            offset = [0.0, 0.0, 0.0, 0.0, 0.0]
+            self._merged_command = [x + y + z for x, y, z in zip(offset, ros2_cmd, self._base_command)]
+            
+
+            # Write telemetry for UI display
+            import ui_extension_example
+            from pxr import UsdGeom, Usd
+            ball_prim = omni.usd.get_context().get_stage().GetPrimAtPath("/World/ball/Tennis_ball_01/ball")
+            robot_prim = omni.usd.get_context().get_stage().GetPrimAtPath("/World/Go2/base")
+            if ball_prim and ball_prim.IsValid() and robot_prim and robot_prim.IsValid():
+
+               # 1. Cast the prim to an Xformable schema
+                xformable = UsdGeom.Xformable(ball_prim)
+                world_transform_matrix = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                ball_tf = world_transform_matrix.ExtractTranslation()
+                #print(f"[Go2Arm] Ball position Global: ({ball_tf[0]:.3f}, {ball_tf[1]:.3f}, {ball_tf[2]:.3f})")
+
+                xformable = UsdGeom.Xformable(robot_prim)
+                world_transform_matrix = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                robot_tf = world_transform_matrix.ExtractTranslation()
+
+                R = world_transform_matrix.ExtractRotation()
+                from isaacsim.core.utils.rotations import matrix_to_euler_angles
+                euler_angles = matrix_to_euler_angles(Gf.Matrix3d(R),degrees=True, extrinsic=False)
+
+                dx = ball_tf[0] - robot_tf[0]
+                dy = ball_tf[1] - robot_tf[1]
+                dz = ball_tf[2] - robot_tf[2]
+                dist_xy = math.hypot(dx, dy)
+
+                # --- Rz: yaw toward ball relative to robot's current heading ---
+                robot_yaw   = euler_angles[2]
+                #print(f"[Go2Arm] Robot yaw: {robot_yaw:.1f} deg, angle to ball: {math.degrees(math.atan2(dy, dx)):.1f} deg")
+
+                #robot_yaw = math.atan2(robot_rot_mat[1][0], robot_rot_mat[0][0])
+                target_yaw = -math.degrees(math.atan2(dy, dx))
+                #print(f"[Go2Arm] Target yaw: {target_yaw:.1f} deg")
+                yaw_error = robot_yaw - target_yaw
+                #print(f"[Go2Arm] Yaw error: {yaw_error:.1f} deg")
+
+
+                #print(f"[Go2Arm] Robot position: ({robot_tf[0]:.3f}, {robot_tf[1]:.3f}, {robot_tf[2]:.3f})")
+                dx = ball_tf[0] - robot_tf[0]
+                dy = ball_tf[1] - robot_tf[1]
+                dz = ball_tf[2] - robot_tf[2]
+                ui_extension_example._telemetry_offset = f"({dx:.3f}, {dy:.3f}, {dz:.3f})"
+                ui_extension_example._dist_xy = f"({dist_xy:.1f} m)"
+
+                ui_extension_example._robot_yaw = f"({robot_yaw:.1f} deg)"
+                ui_extension_example._target_yaw = f"({target_yaw:.1f} deg)"
+                ui_extension_example._yaw_error = f"({yaw_error:.1f} deg)"
+
+                #print(f"[Go2Arm] Ball offset: {ui_extension_example._telemetry_offset}")
+                ui_extension_example._telemetry_command = (
+                    f"[{self._merged_command[0]:.3f}, "
+                    f"{self._merged_command[1]:.3f}, "
+                    f"{self._merged_command[2]:.3f}, "
+                    f"{self._merged_command[3]:.3f}, "
+                    f"{self._merged_command[4]:.3f}]"
+                )
+
+
+ 
+
+
+
             self.go2.forward(step_size, self._merged_command)
         else:
             self._physics_ready = True
@@ -180,6 +263,103 @@ class Go2ArmExample(BaseSample):
         self._event_timer_callback = None
         if self._world.physics_callback_exists("physics_step"):
             self._world.remove_physics_callback("physics_step")
+
+    def _publish_cmd_vel_autopilot(self, cmd: list[float]) -> None:
+        """Publish [vx, vy, yaw_rate, pitch_rate, roll_rate] on cmd_vel_autopilot via OmniGraph."""
+        meta = self._omnigraphs_meta
+        try:
+            ctrl = omni.graph.core.Controller()
+            ctrl.attribute(meta["cmdvel_autopilot_linear_x"]).set(float(cmd[0]))
+            ctrl.attribute(meta["cmdvel_autopilot_linear_y"]).set(float(cmd[1]))
+            ctrl.attribute(meta["cmdvel_autopilot_angular_z"]).set(float(cmd[2]))
+            ctrl.attribute(meta["cmdvel_autopilot_angular_y"]).set(float(cmd[3]))
+            ctrl.attribute(meta["cmdvel_autopilot_angular_x"]).set(float(cmd[4]))
+            # Emit exactly one message publish event when autopilot updates.
+            ctrl.attribute(meta["cmdvel_autopilot_impulse"]).set(True)
+        except Exception as e:
+            print(f"[Go2Arm] Warning: unable to publish cmd_vel_autopilot via OmniGraph: {e}")
+
+    # --------------- autopilot toggle ---------------
+    @property
+    def autopilot_enabled(self):
+        from ui_extension_example import autopilot_enabled
+        return autopilot_enabled
+
+    def _compute_ball_follow_command(self) -> None:
+        """Compute and publish [v_x, v_y, yaw_rate, pitch_rate, roll_rate] for ball follow.
+
+        All three commands are computed simultaneously with smooth blending:
+          Rz (yaw_rate)  — proportional to angle error to ball
+          Vx (forward)   — proportional to distance above target
+          Rx (roll/lean) — ramps up as robot approaches the ball
+        """
+
+        import omni.usd
+        from pxr import UsdGeom
+
+        stage = omni.usd.get_context().get_stage()
+
+        ball_prim = stage.GetPrimAtPath("/World/ball/Tennis_ball_01/ball")
+        if not ball_prim or not ball_prim.IsValid():
+            self._autopilot_command = [0.0, 0.0, 0.0, 0.0, 0.0]
+            self._publish_cmd_vel_autopilot(self._autopilot_command)
+            return
+
+        robot_prim = stage.GetPrimAtPath("/World/Go2/base")
+        if not robot_prim or not robot_prim.IsValid():
+            self._autopilot_command = [0.0, 0.0, 0.0, 0.0, 0.0]
+            self._publish_cmd_vel_autopilot(self._autopilot_command)
+            return
+
+        xformable = UsdGeom.Xformable(ball_prim)
+        world_transform_matrix = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        ball_tf = world_transform_matrix.ExtractTranslation()
+        #print(f"[Go2Arm] Ball position Global: ({ball_tf[0]:.3f}, {ball_tf[1]:.3f}, {ball_tf[2]:.3f})")
+
+        xformable = UsdGeom.Xformable(robot_prim)
+        world_transform_matrix = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+        robot_tf = world_transform_matrix.ExtractTranslation()
+        R = world_transform_matrix.ExtractRotation()
+        from isaacsim.core.utils.rotations import matrix_to_euler_angles
+        euler_angles = matrix_to_euler_angles(Gf.Matrix3d(R),degrees=True, extrinsic=False)
+        #euler_angles = robot_rot_mat.Decompose(Gf.Vec3d.XAxis(), Gf.Vec3d.YAxis(), Gf.Vec3d.ZAxis())
+
+        dx = ball_tf[0] - robot_tf[0]
+        dy = ball_tf[1] - robot_tf[1]
+        dz = ball_tf[2] - robot_tf[2]
+        dist_xy = math.hypot(dx, dy)
+
+        # --- Rz: yaw toward ball relative to robot's current heading ---
+        robot_yaw   = euler_angles[2]
+        
+        target_yaw = -math.degrees(math.atan2(dy, dx))
+
+        yaw_error = robot_yaw - target_yaw
+        # Wrap to [-180, 180] to avoid crossing the ±180° seam the long way
+        yaw_error = (yaw_error + 180.0) % 360.0 - 180.0
+
+        #Rz = max(-self._max_yaw_rate, min(self._max_yaw_rate, self._yaw_gain * yaw_error))
+        Rz = yaw_error * self._yaw_gain
+        # --- Vx: approach velocity (zero when at / inside target distance) ---
+        if dist_xy > self._ball_follow_dist:
+            span = self._ball_follow_start - self._ball_follow_dist
+            Vx = min(self._vx_gain * (dist_xy - self._ball_follow_dist) / span,
+                     self._max_vx)
+        else:
+            Vx = 0.0
+
+        # --- Rx: lean (roll) toward ball, ramps between start and target distance ---
+        if dist_xy < self._ball_follow_start:
+            span = self._ball_follow_start - self._ball_follow_dist
+            t = max(0.0, 1.0 - (dist_xy - self._ball_follow_dist) / span)
+            t = t * t  # smoothstep for extra smoothness
+            Rx = max(-1.0, min(1.0,
+                               self._roll_gain * t * math.copysign(1, dz)))
+        else:
+            Rx = 0.0
+
+        self._autopilot_command = [Vx, Rz, Rz, -Rx, 0.0]
+        self._publish_cmd_vel_autopilot(self._autopilot_command)
 
     # --------------- property accessors ---------------
     @property
