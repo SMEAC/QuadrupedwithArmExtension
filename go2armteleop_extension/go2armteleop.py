@@ -18,16 +18,20 @@
 This sample demonstrates:
   - A Unitree Go2 robot running a flat-terrain RL locomotion policy
   - An OpenManipulator-X arm rigidly attached to the Go2 base
+  - Custom gripper assets mounted on both arm gripper links
+  - Tennis ball asset in the scene for ball-following autopilot
   - Two cameras (on the arm and on the Go2 head) streaming via ROS2
   - An RTX LiDAR with point cloud output via ROS2
-  - Keyboard teleoperation of the Go2 base (forward/back/strafe/spin/pitch)
+  - Keyboard teleoperation of the Go2 base (forward/back/strafe/spin/pitch/roll)
+  - Autopilot ball-following mode (toggle via UI panel)
   - ROS2 bridge integration for cmd_vel, joint_states, odometry, transforms, and camera feeds
 
 Architecture:
   Scene setup    → scene.py
   Camera/view    → cameras.py
   OmniGraphs     → omnigraphs.py
-  This file      → orchestration, keyboard input, physics callbacks
+  UI panel       → ui_extension_example.py
+  This file      → orchestration, keyboard input, physics callbacks, autopilot
 """
 
 import os
@@ -358,7 +362,7 @@ class Go2ArmExample(BaseSample):
         else:
             Rx = 0.0
 
-        self._autopilot_command = [Vx, Rz, Rz, -Rx, 0.0]
+        self._autopilot_command = [Vx, 0.0, Rz, -Rx, 0.0]
         self._publish_cmd_vel_autopilot(self._autopilot_command)
 
     # --------------- property accessors ---------------

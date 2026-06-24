@@ -485,8 +485,8 @@ def setup_scene(
                               offset=np.array([0.2, 0.0, 0.07]),
                               rot=np.array([0.0, 0.0, 0.0]))
 
-    gripper_left_prim_path = create_gripper(stage,gripper_prim_path:="/World/gripper_left", scale=np.array([1.5, 1.5, 1.5]))
-    gripper_right_prim_path = create_gripper(stage,gripper_prim_path:="/World/gripper_right", scale=np.array([1.5, 1.5, 1.5]))
+    gripper_left_prim_path = create_gripper(stage, gripper_prim_path="/World/gripper_left", scale=np.array([1.5, 1.5, 1.5]))
+    gripper_right_prim_path = create_gripper(stage, gripper_prim_path="/World/gripper_right", scale=np.array([1.5, 1.5, 1.5]))
     create_fixed_joint(stage, "/World/open_manipulator_x/gripper_left_link", 
                               "/World/gripper_left", 
                               offset=np.array([0.15, 0.045, -0.045]), 

@@ -7,6 +7,8 @@ An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot 
 - RL-based flat-terrain locomotion policy (trained in Isaac Lab) on a Go2 quadruped
 - OpenManipulator-X arm rigidly attached to the Go2 base via a fixed joint
 - Tennis ball asset (bundled USD) placed in the scene
+- Autopilot ball-following mode with ``[-180, 180]``-wrapped yaw error
+- Custom gripper asset mounted on both arm gripper links
 - Two cameras: one mounted on the arm wrist, one on the Go2 head
 - RTX LiDAR with ROS2 point cloud output
 - Full ROS2 bridge integration: `cmd_vel`, `joint_states`, odometry, TF, camera feeds, clock
@@ -90,7 +92,21 @@ Edit `go2armteleop.py` (`Go2ArmExample.__init__`, ~line 110):
 
 ```python
 self.arm_usd_path = "/path/to/open_manipulator_x.usd"   # Path to your OpenManipulator-X USD
-self.arm_position = np.array([1.5, 0.0, 0.0])           # Position of arm on the Go2 base
+self.arm_position = np.array([0.2, 0.0, 0.07])           # Position of arm on the Go2 base
+```
+
+## Autopilot Ball-Following Parameters
+
+In `Go2ArmExample.__init__`:
+
+```python
+self._ball_follow_dist = 0.6      # stop distance (m)
+self._ball_follow_start = 1.5     # activate at this distance (m)
+self._yaw_gain = 0.01             # proportional yaw rate gain
+self._vx_gain = 0.8               # approach velocity gain
+self._roll_gain = 1.0             # lean toward ball gain
+self._max_yaw_rate = 1.5          # max yaw rate (rad/s)
+self._max_vx = 0.4                # max forward velocity (m/s)
 ```
 
 ## Keyboard Controls
@@ -123,17 +139,23 @@ go2withArmExtension/
 │       └── env.yaml          # Bundled policy environment config
 ├── docs/
 │   ├── Overview.md           # Detailed documentation
+│   ├── README.md             # Mirror of Overview.md
 │   └── CHANGELOG.md          # Version history
 ├── go2armteleop_extension/
 │   ├── __init__.py           # Package entry point
-│   ├── go2armteleop.py       # Interactive sample (orchestration, keyboard, lifecycle)
+│   ├── go2armteleop.py       # Interactive sample (orchestration, keyboard, lifecycle, autopilot)
 │   ├── go2armteleop_extension.py   # Extension wrapper (Examples Browser registration)
-│   ├── scene.py              # Scene objects: ground, Go2 robot, arm, tennis ball, LiDAR, cameras
+│   ├── ui_extension_example.py   # UI panel (autopilot toggle, telemetry, debug)
+│   ├── scene.py              # Scene objects: ground, Go2 robot, arm, tennis ball, LiDAR, cameras, gripper
 │   ├── cameras.py            # Camera setup and viewport assignment
 │   ├── omnigraphs.py         # ROS2 bridge OmniGraph creation
 │   └── policy/
 │       ├── __init__.py
 │       └── go2withpitch.py   # Go2 RL policy controller
+├── resource/
+│   ├── Tennis_ball_01.usda   # Tennis ball asset
+│   ├── Gripper_Ball_v3.usda  # Gripper asset
+│   └── openManipulator/      # Arm configs + meshes
 └── LICENSE
 ```
 

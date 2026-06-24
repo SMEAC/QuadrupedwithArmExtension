@@ -8,7 +8,9 @@ An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot 
 
 - **RL-based locomotion** - flat-terrain policy trained in Isaac Lab, running inference every decimation step
 - **OpenManipulator-X arm** - rigidly attached to the Go2 base via a fixed joint
-- **Tennis ball** - bundled USD asset placed in the scene at ``[0.0, 1.0, 0.5]``
+- **Tennis ball** - bundled USD asset placed in the scene at ``[2.0, 1.0, 1.5]``
+- **Autopilot** - ball-following mode (toggle in UI panel) with ``[-180, 180]``-wrapped yaw error
+- **Gripper** - custom gripper asset (``Gripper_Ball_v3.usda``) mounted on both arm gripper links
 - **Dual cameras** - arm wrist camera and Go2 head camera, streaming RGB via ROS2
 - **RTX LiDAR** - 3D point cloud output via ROS2
 - **Full ROS2 bridge** - `cmd_vel`, `joint_states`, odometry, TF, camera feeds, simulation clock
@@ -64,7 +66,21 @@ In `go2armteleop.py` (`Go2ArmExample.__init__`, ~line 110):
 
 ```python
 self.arm_usd_path = "/path/to/open_manipulator_x.usd"
-self.arm_position = np.array([1.5, 0.0, 0.0])   # position on Go2 base
+self.arm_position = np.array([0.2, 0.0, 0.07])   # position on Go2 base
+```
+
+### Ball follow autopilot parameters
+
+In `Go2ArmExample.__init__`:
+
+```python
+self._ball_follow_dist = 0.6      # stop distance (m)
+self._ball_follow_start = 1.5     # activate at this distance (m)
+self._yaw_gain = 0.01             # proportional yaw rate gain
+self._vx_gain = 0.8               # approach velocity gain
+self._roll_gain = 1.0             # lean toward ball gain
+self._max_yaw_rate = 1.5          # max yaw rate (rad/s)
+self._max_vx = 0.4                # max forward velocity (m/s)
 ```
 
 ## Keyboard Controls
@@ -96,9 +112,10 @@ go2armteleop_extension/
 |       +-- policy.pt          # Bundled Go2 locomotion policy weights
 |       +-- env.yaml           # Bundled policy environment config
 +-- __init__.py                # Package entry point
-+-- go2armteleop.py            # Interactive sample (orchestration, keyboard, lifecycle)
++-- go2armteleop.py            # Interactive sample (orchestration, keyboard, lifecycle, autopilot)
 +-- go2armteleop_extension.py  # Extension wrapper (Examples Browser registration)
-+-- scene.py                   # Scene objects: ground, Go2 robot, arm, tennis ball, LiDAR, cameras
++-- ui_extension_example.py    # UI panel (autopilot toggle, telemetry, debug)
++-- scene.py                   # Scene objects: ground, Go2 robot, arm, tennis ball, LiDAR, cameras, gripper
 +-- cameras.py                 # Camera setup and viewport assignment
 +-- omnigraphs.py              # ROS2 bridge OmniGraph creation
 +-- policy/
@@ -113,11 +130,21 @@ go2armteleop_extension/
 3. **Merge** -> `keyboard + cmd_vel` -> passed to `go2.forward()`.
 4. `go2.forward()` -> every `_decimation` steps: observation -> policy inference -> `ArticulationAction` (12 joint position targets, scaled by 0.25) -> applied to Go2 articulation.
 
+### Autopilot (ball-following)
+
+When enabled via the UI panel toggle:
+
+1. `_compute_ball_follow_command()` reads ball and robot transforms from the USD stage
+2. Computes yaw error with `[-180, 180]` wrap to avoid the ±180° seam reversal bug
+3. Publishes `[Vx, 0.0, Rz, -Rx, 0.0]` on `/CMDVELAutopilotGraph` (impulse-triggered ROS2 publisher)
+4. Merged with keyboard commands in `on_physics_step()`
+
 ### OmniGraphs
 
 | Graph | Purpose |
 |-------|-------|
 | `/CMDVELGraph` | Subscribe to `cmd_vel` (`geometry_msgs/Twist`) |
+| `/CMDVELAutopilotGraph` | Publish autopilot commands (impulse-triggered) |
 | `/ArmGraph` | Subscribe to `joint_states`, drive arm articulation |
 | `/LIDARGraph3D` | RTX LiDAR point cloud -> ROS2 |
 | `/OdometryGraph` | Publish odometry, TF trees, simulation time |

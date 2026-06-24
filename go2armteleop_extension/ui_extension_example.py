@@ -3,8 +3,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from cProfile import label
-
 import omni.ext
 from pxr import Usd
 from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
