@@ -362,7 +362,7 @@ class Go2ArmExample(BaseSample):
         else:
             Rx = 0.0
 
-        self._autopilot_command = [Vx, 0.0, Rz, -Rx, 0.0]
+        self._autopilot_command = [Vx, 0.0, 2*Rz, -Rx, 0.0]
         self._publish_cmd_vel_autopilot(self._autopilot_command)
 
     # --------------- property accessors ---------------

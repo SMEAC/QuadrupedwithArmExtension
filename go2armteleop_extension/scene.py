@@ -188,6 +188,57 @@ def create_ball(
     
     return ball_prim_path
 
+def create_basket(
+    stage,
+    basket_prim_path: str = "/World/basket",
+    position: np.ndarray | None = None,
+) -> str:
+    """Load the basket USD into the scene.
+
+    The USD file is resolved relative to the extension root directory
+    via ``_get_extension_root()`` so the function works regardless of
+    the working directory from which Isaac Sim is launched.
+
+    Args:
+        stage: The current USD stage.
+        basket_prim_path: USD prim path for the basket.
+        position: Initial position [x, y, z].
+
+    Returns:
+        The USD prim path of the basket.
+    """
+    if position is None:
+        position = np.array([1.0, 1.0, 1.5])
+
+    # Load basket from NVIDIA OCP URL.
+    basket_url = (
+        "https://omniverse-content-production.s3-us-west-2.amazonaws.com"
+        "/Assets/Isaac/5.1/Isaac/Props/KLT_Bin/small_KLT.usd"
+    )
+    print(f"[Go2Arm] Placing Basket from {basket_url}")
+    stage_utils.add_reference_to_stage(basket_url, basket_prim_path)
+    print(f"[Go2Arm] Basket placed")
+    # Apply position to the referenced basket prim if possible.
+    basket_prim = stage.GetPrimAtPath(basket_prim_path)
+    if basket_prim and basket_prim.IsValid():
+        try:
+            xformable_prim = _find_xformable_prim(basket_prim)
+            if xformable_prim is not None:
+                xform = UsdGeom.XformCommonAPI(xformable_prim)
+                xform.SetTranslate(Gf.Vec3d(*position))
+                #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
+                #xform.set_linear_velocity(linear_vel)
+                print(f"[Go2Arm] Basket placed at {basket_prim_path}")
+            else:
+                print(f"[Go2Arm] Warning: no xformable prim found for basket at {basket_prim_path}")
+        except Exception as e:
+            print(f"[Go2Arm] Warning: failed to set basket position: {e}")
+    else:
+        print(f"[Go2Arm] Warning: basket prim not found at {basket_prim_path}")
+    
+    
+    return basket_prim_path
+
 def create_gripper(
     stage,
     gripper_prim_path: str = "/World/gripper_left",
@@ -499,6 +550,9 @@ def setup_scene(
                               rot=np.array([-90.0, 0.0, 90.0]))
     # Tennis ball
     ball_prim_path = create_ball(stage, ball_prim_path="/World/ball", position=np.array([2.0, 1.0, 1.5]))
+
+    # Objects
+    basket_prim_path = create_basket(stage, basket_prim_path="/World/basket", position=np.array([2.0, -1.0, 0.5]))
 
     # Arm-mounted camera
     camera_arm = create_camera_obj(
