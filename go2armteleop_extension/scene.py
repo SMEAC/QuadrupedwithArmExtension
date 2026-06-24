@@ -188,6 +188,109 @@ def create_ball(
     
     return ball_prim_path
 
+
+def create_mat(
+    stage,
+    mat_prim_path: str = "/World/mat",
+    position: np.ndarray | None = None,
+    color: np.ndarray | None = None,
+) -> str:
+    """Load the mat USD into the scene.
+
+    The USD file is resolved relative to the extension root directory
+    via ``_get_extension_root()`` so the function works regardless of
+    the working directory from which Isaac Sim is launched.
+
+    Args:
+        stage: The current USD stage.
+        mat_prim_path: USD prim path for the mat.
+        position: Initial position [x, y, z].
+        color: Color of the mat [r, g, b].
+    Returns:
+        The USD prim path of the mat.
+    """
+    if position is None:
+        position = np.array([1.0, 1.0, 1.5])
+    if color is None:
+        color = np.array([1.0, 1.0, 1.0])
+
+    # Load mat from NVIDIA OCP URL.
+    mat_url = (
+        "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Props/Shapes/plane.usd"
+    )
+    print(f"[Go2Arm] Placing Mat from {mat_url}")
+    stage_utils.add_reference_to_stage(mat_url, mat_prim_path)
+    print(f"[Go2Arm] Mat placed")
+
+    # Apply position to the referenced mat prim if possible.
+    mat_prim = stage.GetPrimAtPath(mat_prim_path)
+    if mat_prim and mat_prim.IsValid():
+        try:
+            xformable_prim = _find_xformable_prim(mat_prim)
+            if xformable_prim is not None:
+                xform = UsdGeom.XformCommonAPI(xformable_prim)
+                xform.SetTranslate(Gf.Vec3d(*position))
+                #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
+                #xform.set_linear_velocity(linear_vel)
+                print(f"[Go2Arm] Mat placed at {mat_prim_path}")
+            else:
+                print(f"[Go2Arm] Warning: no xformable prim found for mat at {mat_prim_path}")
+        except Exception as e:
+            print(f"[Go2Arm] Warning: failed to set mat position: {e}")
+    else:
+        print(f"[Go2Arm] Warning: mat prim not found at {mat_prim_path}")
+
+    # Create an OmniPBR material and apply it to the mat prim with the given color.
+    mat_prim_path = Sdf.Path(mat_prim_path).AppendChild("Mat")
+    shader_prim_path = str(mat_prim_path) + "/defaultMaterial"
+    try:
+        mat_prim = stage.GetPrimAtPath(mat_prim_path)
+        if not mat_prim or not mat_prim.IsValid():
+            from pxr import UsdShade
+
+            # 1. Create the Material prim.
+            mat_prim = stage.GetRootLayer().CreatePrimAtPath(mat_prim_path)
+            mat_prim.GetRefCollection().AddCollection("materials:gapi/hdStorm/rpr")
+
+            # 2. Create the OmniPBR shader prim inside the Material.
+            shader_prim = stage.GetRootLayer().CreatePrimAtPath(shader_prim_path)
+            shader_prim.SetTypeName("OmniPBR")
+
+            # 3. Set the diffuseColor (Albedo) and diffuseOpacity on the shader.
+            diffuse_color = Gf.Vec3f(float(color[0]), float(color[1]), float(color[2]))
+            shader_prim.GetAttribute("inputs:diffuseColor").Set(diffuse_color)
+            shader_prim.GetAttribute("inputs:diffuseOpacity").Set(1.0)
+
+            # 4. Create the UsdShade.Material wrapper.
+            mat = UsdShade.Material(mat_prim)
+
+            # 5. Wire shader outputs → material inputs.
+            mat.CreateSurfaceOutput().ConnectSourceMaterialPort(
+                shader_prim_path, "surface", "output"
+            )
+            mat.CreateDisplacementOutput().ConnectSourceMaterialPort(
+                shader_prim_path, "displacement", "output"
+            )
+            mat.CreateBxDFOutput().ConnectSourceMaterialPort(
+                shader_prim_path, "bxdf", "output"
+            )
+
+            # 6. Bind the material to the mat's geometry prim (not the Material prim).
+            bind_prim = stage.GetPrimAtPath(Sdf.Path(mat_prim_path).GetParentPath())
+            if bind_prim and bind_prim.IsValid():
+                UsdShade.MaterialBindingAPI(bind_prim).Bind(
+                    mat, UsdShade.Tokens.strongerThanDefaultBindings
+                )
+
+            print(f"[Go2Arm] OmniPBR material created at {mat_prim_path}")
+        else:
+            print(f"[Go2Arm] Material prim already exists at {mat_prim_path}")
+    except Exception as e:
+        print(f"[Go2Arm] Warning: failed to create OmniPBR material: {e}")
+    
+    
+    return mat_prim_path
+
 def create_basket(
     stage,
     basket_prim_path: str = "/World/basket",
