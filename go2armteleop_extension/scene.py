@@ -226,64 +226,36 @@ def create_mat(
             if xformable_prim is not None:
                 xform = UsdGeom.XformCommonAPI(xformable_prim)
                 xform.SetTranslate(Gf.Vec3d(*position))
-                #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
-                #xform.set_linear_velocity(linear_vel)
-                #print(f"[Go2Arm] Mat placed at {mat_prim_path}")
             else:
                 print(f"[Go2Arm] Warning: no xformable prim found for mat at {mat_prim_path}")
         except Exception as e:
             print(f"[Go2Arm] Warning: failed to set mat position: {e}")
     else:
         print(f"[Go2Arm] Warning: mat prim not found at {mat_prim_path}")
-
-    # Create an OmniPBR material and apply it to the mat prim with the given color.
-    mat_prim_path = Sdf.Path(mat_prim_path).AppendChild("Mat")
-    shader_prim_path = str(mat_prim_path) + "/defaultMaterial"
-    try:
-        mat_prim = stage.GetPrimAtPath(mat_prim_path)
-        if not mat_prim or not mat_prim.IsValid():
-            from pxr import UsdShade
-
-            # 1. Create the Material prim.
-            mat_prim = stage.GetRootLayer().CreatePrimAtPath(mat_prim_path)
-            mat_prim.GetRefCollection().AddCollection("materials:gapi/hdStorm/rpr")
-
-            # 2. Create the OmniPBR shader prim inside the Material.
-            shader_prim = stage.GetRootLayer().CreatePrimAtPath(shader_prim_path)
-            shader_prim.SetTypeName("OmniPBR")
-
-            # 3. Set the diffuseColor (Albedo) and diffuseOpacity on the shader.
-            diffuse_color = Gf.Vec3f(float(color[0]), float(color[1]), float(color[2]))
-            shader_prim.GetAttribute("inputs:diffuseColor").Set(diffuse_color)
-            shader_prim.GetAttribute("inputs:diffuseOpacity").Set(1.0)
-
-            # 4. Create the UsdShade.Material wrapper.
-            mat = UsdShade.Material(mat_prim)
-
-            # 5. Wire shader outputs → material inputs.
-            mat.CreateSurfaceOutput().ConnectSourceMaterialPort(
-                shader_prim_path, "surface", "output"
-            )
-            mat.CreateDisplacementOutput().ConnectSourceMaterialPort(
-                shader_prim_path, "displacement", "output"
-            )
-            mat.CreateBxDFOutput().ConnectSourceMaterialPort(
-                shader_prim_path, "bxdf", "output"
-            )
-
-            # 6. Bind the material to the mat's geometry prim (not the Material prim).
-            bind_prim = stage.GetPrimAtPath(Sdf.Path(mat_prim_path).GetParentPath())
-            if bind_prim and bind_prim.IsValid():
-                UsdShade.MaterialBindingAPI(bind_prim).Bind(
-                    mat, UsdShade.Tokens.strongerThanDefaultBindings
-                )
-
-            #print(f"[Go2Arm] OmniPBR material created at {mat_prim_path}")
-        else:
-            print(f"[Go2Arm] Material prim already exists at {mat_prim_path}")
-    except Exception as e:
-        print(f"[Go2Arm] Warning: failed to create OmniPBR material: {e}")
     
+    print(f"[Go2Arm] Creating OmniPBR material for mat at {mat_prim_path} with color {color}")
+    from isaacsim.core.api.materials import OmniPBR
+    try:
+        from isaacsim.core.prims.prim import Prim
+    except ModuleNotFoundError:
+        try:
+            from isaacsim.core.prims import XFormPrim as Prim
+        except Exception:
+            Prim = None
+    # 3. Create a basic OmniPBR material with your chosen color (e.g., Red)
+    # Color values are RGB floats between 0.0 and 1.0
+    plane_material = OmniPBR(
+        prim_path=mat_prim_path + "/OmniPBR_Material",
+        color=color,  # Use the provided color
+    )
+    
+    # 4. Bind the material to your plane prim
+    # We create a Prims controller wrapping the plane path to execute the binding
+    if Prim is not None:
+        mat_prim = Prim(prim_paths_expr=mat_prim_path)
+        mat_prim.apply_visual_materials(plane_material)
+    else:
+        print("[Go2Arm] Warning: unable to bind material; Prim wrapper class not available in this Isaac Sim build")
     
     return mat_prim_path
 
@@ -644,6 +616,11 @@ def setup_scene(
 
     # Objects
     basket_prim_path = create_basket(stage, basket_prim_path="/World/basket", position=np.array([2.0, -1.0, 0.5]))
+
+    # Objects
+    mat1_prim_path = create_mat(stage, mat_prim_path="/World/mat1", position=np.array([2.0, 2.0, 0.001]), color=np.array([0.0, 0.0, 0.8]))
+    mat2_prim_path = create_mat(stage, mat_prim_path="/World/mat2", position=np.array([4.0, 2.0, 0.001]), color=np.array([0.0, 0.6, 0.0]))
+
 
     # Arm-mounted camera
     camera_arm = create_camera_obj(
