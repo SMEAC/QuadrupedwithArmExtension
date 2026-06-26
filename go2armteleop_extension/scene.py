@@ -33,7 +33,7 @@ from isaacsim.sensors.physx import _range_sensor
 from omni.isaac.core.articulations import Articulation
 from omni.isaac.sensor import Camera
 from pxr import UsdGeom, Sdf, Gf, UsdPhysics
-from policy.go2withpitch import Go2withPitchFlatTerrainPolicy
+from policy.robots.go2withpitch import Go2withPitchFlatTerrainPolicy
 from isaacsim.core.experimental.prims import RigidPrim
 
 
@@ -164,9 +164,7 @@ def create_ball(
     # Resolve the relative resource path against the extension root.
     _ball_usd_rel = "resource/Tennis_ball_01.usda"
     ball_usd_abs = os.path.join(_get_extension_root(), _ball_usd_rel)
-    print(f"[Go2Arm] Placing Ball")
     stage_utils.add_reference_to_stage(ball_usd_abs, ball_prim_path)
-    print(f"[Go2Arm] Ball placed")
     # Apply position to the referenced ball prim if possible.
     ball_prim = stage.GetPrimAtPath(ball_prim_path)
     if ball_prim and ball_prim.IsValid():
@@ -177,7 +175,6 @@ def create_ball(
                 xform.SetTranslate(Gf.Vec3d(*position))
                 #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
                 #xform.set_linear_velocity(linear_vel)
-                print(f"[Go2Arm] Ball placed at {ball_prim_path}")
             else:
                 print(f"[Go2Arm] Warning: no xformable prim found for ball at {ball_prim_path}")
         except Exception as e:
@@ -218,10 +215,9 @@ def create_mat(
     mat_url = (
         "https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Props/Shapes/plane.usd"
     )
-    print(f"[Go2Arm] Placing Mat from {mat_url}")
+    
     stage_utils.add_reference_to_stage(mat_url, mat_prim_path)
-    print(f"[Go2Arm] Mat placed")
-
+    
     # Apply position to the referenced mat prim if possible.
     mat_prim = stage.GetPrimAtPath(mat_prim_path)
     if mat_prim and mat_prim.IsValid():
@@ -232,7 +228,7 @@ def create_mat(
                 xform.SetTranslate(Gf.Vec3d(*position))
                 #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
                 #xform.set_linear_velocity(linear_vel)
-                print(f"[Go2Arm] Mat placed at {mat_prim_path}")
+                #print(f"[Go2Arm] Mat placed at {mat_prim_path}")
             else:
                 print(f"[Go2Arm] Warning: no xformable prim found for mat at {mat_prim_path}")
         except Exception as e:
@@ -282,7 +278,7 @@ def create_mat(
                     mat, UsdShade.Tokens.strongerThanDefaultBindings
                 )
 
-            print(f"[Go2Arm] OmniPBR material created at {mat_prim_path}")
+            #print(f"[Go2Arm] OmniPBR material created at {mat_prim_path}")
         else:
             print(f"[Go2Arm] Material prim already exists at {mat_prim_path}")
     except Exception as e:
@@ -318,9 +314,7 @@ def create_basket(
         "https://omniverse-content-production.s3-us-west-2.amazonaws.com"
         "/Assets/Isaac/5.1/Isaac/Props/KLT_Bin/small_KLT.usd"
     )
-    print(f"[Go2Arm] Placing Basket from {basket_url}")
     stage_utils.add_reference_to_stage(basket_url, basket_prim_path)
-    print(f"[Go2Arm] Basket placed")
     # Apply position to the referenced basket prim if possible.
     basket_prim = stage.GetPrimAtPath(basket_prim_path)
     if basket_prim and basket_prim.IsValid():
@@ -331,7 +325,6 @@ def create_basket(
                 xform.SetTranslate(Gf.Vec3d(*position))
                 #linear_vel = np.array([0.5, 0.0, 0.0]) # Move 0.5 m/s along X-axis
                 #xform.set_linear_velocity(linear_vel)
-                print(f"[Go2Arm] Basket placed at {basket_prim_path}")
             else:
                 print(f"[Go2Arm] Warning: no xformable prim found for basket at {basket_prim_path}")
         except Exception as e:
@@ -369,9 +362,7 @@ def create_gripper(
     # Resolve the relative resource path against the extension root.
     _gripper_usd_rel = "resource/Gripper_Ball_v3.usda"
     gripper_usd_abs = os.path.join(_get_extension_root(), _gripper_usd_rel)
-    print(f"[Go2Arm] Gripper placed")
     stage_utils.add_reference_to_stage(gripper_usd_abs, gripper_prim_path)
-    print(f"[Go2Arm] Gripper placed")
     # Apply position to the referenced gripper prim if possible.
     gripper_prim = stage.GetPrimAtPath(gripper_prim_path)
     if gripper_prim and gripper_prim.IsValid():
@@ -432,9 +423,6 @@ def create_fixed_joint(stage, body0_path: str, body1_path: str, offset: np.ndarr
         physics_joint = UsdPhysics.Joint(joint_prim)
         physics_joint.GetLocalPos0Attr().Set(Gf.Vec3f(offset[0], offset[1], offset[2]))
         physics_joint.GetLocalRot0Attr().Set(Gf.Quatf(orientation[0], orientation[1], orientation[2], orientation[3]))
-        print(f"[Go2Arm] Fixed joint created between {body0_path} and {body1_path}")
-    joint_path = joint_prim.GetPath()
-    print(f"[Go2Arm] Fixed joint created at {joint_path}")
 
 def create_rtx_lidar(
     prim_path: str = "/World/Go2/radar/lidar3D",

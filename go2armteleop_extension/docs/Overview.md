@@ -9,13 +9,17 @@ An Isaac Sim 5.1+ extension for teleoperating a **Unitree Go2** quadruped robot 
 - **RL-based locomotion** - flat-terrain policy trained in Isaac Lab, running inference every decimation step
 - **OpenManipulator-X arm** - rigidly attached to the Go2 base via a fixed joint
 - **Tennis ball** - bundled USD asset placed in the scene at ``[2.0, 1.0, 1.5]``
-- **Autopilot** - ball-following mode (toggle in UI panel) with ``[-180, 180]``-wrapped yaw error
+- **Basket** - KLT bin loaded from NVIDIA OCP URL at ``[2.0, -1.0, 0.5]``
+- **Mat** - plane with configurable OmniPBR material color
+- **Autopilot** - ball-following mode (toggle in UI panel) with ``[-180, 180]``-wrapped yaw error, smoothstep roll blending, and doubled yaw gain
 - **Gripper** - custom gripper asset (``Gripper_Ball_v3.usda``) mounted on both arm gripper links
-- **Dual cameras** - arm wrist camera and Go2 head camera, streaming RGB via ROS2
+- **Dual cameras** - arm wrist camera and Go2 head camera (512×512), streaming RGB via ROS2
 - **RTX LiDAR** - 3D point cloud output via ROS2
 - **Full ROS2 bridge** - `cmd_vel`, `joint_states`, odometry, TF, camera feeds, simulation clock
-- **Keyboard teleoperation** - base velocity (forward/back/strafe/spin) and body pitch/roll control
+- **Keyboard teleoperation** - base velocity (forward/back/strafe/spin/pitch/roll) and body pitch/roll control
 - **ROS2 `cmd_vel` fusion** - keyboard commands merge with `/cmd_vel` input so external systems can also drive the robot
+- **Modular architecture** - scene, cameras, omnigraphs, and policy each in separate modules
+- **Refactored policy** - dedicated controllers, core prims, and robot classes
 
 ## Prerequisites
 
@@ -53,7 +57,7 @@ In Isaac Sim go to **Edit -> Preferences -> Extensions -> Extension Search Path*
 
 ### Policy weights
 
-Policy weights (`.pt`) and environment config (`.yaml`) are bundled with the extension in the `data/policy/` directory. To use a custom policy, set the paths in `go2armteleop.py` (`Go2ArmExample.__init__`):
+Policy weights (`.pt`) and environment config (`.yaml`) are bundled with the extension in the `policy/data/policy/` directory. To use a custom policy, set the paths in `go2armteleop.py` (`Go2ArmExample.__init__`):
 
 ```python
 self.policy_path = "/path/to/your/policy.pt"
@@ -106,28 +110,40 @@ Hold a key to accumulate command velocity; release to stop. Commands accumulate 
 go2armteleop_extension/
 +-- config/
 |   +-- extension.toml         # Isaac Sim extension manifest
-+-- data/
-|   +-- preview.png            # Extension catalog preview
-|   +-- policy/
-|       +-- policy.pt          # Bundled Go2 locomotion policy weights
-|       +-- env.yaml           # Bundled policy environment config
++-- policy/
+|   +-- __init__.py
+|   +-- robots/
+|   |   +-- __init__.py
+|   |   +-- go2withpitch.py    # Go2withPitchFlatTerrainPolicy (RL policy)
+|   +-- controllers/
+|   |   +-- __init__.py
+|   |   +-- config_loader.py   # parse_env_config, get_robot_joint_properties, etc.
+|   |   +-- policy_controller.py  # PolicyControllerGo2 (base controller)
+|   +-- core/
+|   |   +-- __init__.py
+|   |   +-- articulation.py    # Articulation wrapper
+|   |   +-- single_articulation.py  # SingleArticulation prim wrapper
+|   |   +-- single_prim_wrapper.py  # _SinglePrimWrapper base class
+|   |   +-- xform_prim.py      # XFormPrim prim view class
+|   +-- data/
+|       +-- policy/
+|       |   +-- policy.pt      # Bundled Go2 locomotion policy weights
+|       |   +-- env.yaml       # Bundled policy environment config
+|       +-- preview.png        # Extension catalog preview
 +-- __init__.py                # Package entry point
 +-- go2armteleop.py            # Interactive sample (orchestration, keyboard, lifecycle, autopilot)
 +-- go2armteleop_extension.py  # Extension wrapper (Examples Browser registration)
-+-- ui_extension_example.py    # UI panel (autopilot toggle, telemetry, debug)
-+-- scene.py                   # Scene objects: ground, Go2 robot, arm, tennis ball, LiDAR, cameras, gripper
-+-- cameras.py                 # Camera setup and viewport assignment
++-- ui_extension.py    # UI panel (autopilot toggle, telemetry, debug, joint inspector)
++-- scene.py                   # Scene objects: ground, Go2 robot, arm, ball, basket, mat, LiDAR, cameras, gripper
++-- cameras.py                 # CameraConfig dataclass, camera creation, viewport assignment
 +-- omnigraphs.py              # ROS2 bridge OmniGraph creation
-+-- policy/
-    +-- __init__.py
-    +-- go2withpitch.py        # Go2withPitchFlatTerrainPolicy (RL policy)
 ```
 
 ### Data flow
 
 1. Keyboard press -> `_base_command` accumulates a 5-dim vector `[v_x, v_y, yaw_rate, pitch_rate, roll_rate]`.
 2. ROS2 `cmd_vel` -> read from the `/CMDVELGraph` OmniGraph.
-3. **Merge** -> `keyboard + cmd_vel` -> passed to `go2.forward()`.
+3. **Merge** -> `keyboard + cmd_vel + autopilot` -> passed to `go2.forward()`.
 4. `go2.forward()` -> every `_decimation` steps: observation -> policy inference -> `ArticulationAction` (12 joint position targets, scaled by 0.25) -> applied to Go2 articulation.
 
 ### Autopilot (ball-following)
@@ -136,8 +152,9 @@ When enabled via the UI panel toggle:
 
 1. `_compute_ball_follow_command()` reads ball and robot transforms from the USD stage
 2. Computes yaw error with `[-180, 180]` wrap to avoid the ±180° seam reversal bug
-3. Publishes `[Vx, 0.0, Rz, -Rx, 0.0]` on `/CMDVELAutopilotGraph` (impulse-triggered ROS2 publisher)
-4. Merged with keyboard commands in `on_physics_step()`
+3. Applies smoothstep roll blending that ramps as robot approaches the ball
+4. Publishes `[Vx, 0.0, 2*Rz, -Rx, 0.0]` on `/CMDVELAutopilotGraph` (impulse-triggered ROS2 publisher)
+5. Merged with keyboard commands in `on_physics_step()`
 
 ### OmniGraphs
 
@@ -156,6 +173,38 @@ When enabled via the UI panel toggle:
 
 - **Observation** - 50-dim vector: base linear/ang velocity, gravity direction, command, joint positions (relative to default), joint velocities, previous action.
 - **Action** - 12-dim joint position targets for Go2 leg joints, scaled by `0.25`.
+
+## Differences from Original Isaac Lab Repository
+
+This extension diverges from the original Isaac Lab `go2withArm` repository in several key ways:
+
+### Policy Architecture
+
+- **Refactored into sub-packages**: The original monolithic `go2withpitch.py` has been split into `policy/robots/`, `policy/controllers/`, and `policy/core/` sub-packages
+- **Policy data nested**: Weights and config moved to `policy/data/policy/`
+- **Base controller**: `PolicyControllerGo2` extracted as a reusable base class
+
+### Scene Objects
+
+- **Basket**: New `create_basket()` — KLT bin from NVIDIA OCP URL at `[2.0, -1.0, 0.5]`
+- **Mat**: New `create_mat()` — plane with configurable OmniPBR color
+- **Ball position**: Changed from `[0.0, 1.0, 0.5]` to `[2.0, 1.0, 1.5]`
+- **Arm mount**: Changed from `[0.2, 0.0, 0.07]` to `[1.5, 0.0, 0.0]`
+- **Go2 USD**: Now via `get_assets_root_path()` (NVIDIA OCP) instead of hardcoded path
+- **Gripper**: Uses `Gripper_Ball_v3.usda`, wrapped with `RigidPrim`
+
+### Autopilot
+
+- **Yaw error wrapping**: Added `[-180, 180]` modulo wrap
+- **Yaw command**: Doubled (`2*Rz`)
+- **Roll blending**: Smoothstep-based, ramps as robot approaches ball
+- **Command**: `[Vx, 0.0, 2*Rz, -Rx, 0.0]` (was `[Vx, 0.0, Rz, -Rx, 0.0]`)
+
+### Camera System
+
+- **CameraConfig dataclass**: Structured config objects in `cameras.py`
+- **Viewport assignment**: Explicit dual-viewport camera assignment
+- **Resolution**: Both cameras at 512×512
 
 ## License
 

@@ -13,16 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Go2 with Arm Teleoperation extension package.
 
-This package provides a Unitree Go2 quadruped robot with an OpenManipulator-X arm,
-controlled via a reinforcement learning policy with keyboard teleoperation input.
-"""
-
-from .policy.robots.go2withpitch import Go2withPitchFlatTerrainPolicy
-from .go2armteleop import Go2ArmExample
-
-__all__ = [
-    "Go2withPitchFlatTerrainPolicy",
-    "Go2ArmExample",
-]
+from .go2withpitch import Go2withPitchFlatTerrainPolicy

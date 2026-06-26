@@ -124,15 +124,15 @@ def setup_viewports(
             (default: "Viewport 2").
     """
     viewport = get_viewport_from_window_name("Viewport")
-    print(f"Got viewport: {viewport}")
+    #print(f"Got viewport: {viewport}")
     # Set the viewport to the camera
     if viewport:
         viewport.set_active_camera("/World/open_manipulator_x/link5/Go2Camera")
     else:
-        print("Failed to set Viewport 1")   
+        print("Failed to set Viewport 1")
 
     viewport2 = get_viewport_from_window_name("Viewport 2")
-    print(f"Got viewport: {viewport2}")
+    #print(f"Got viewport: {viewport2}")
     # Set the viewport to the camera
     if viewport2:
         viewport2.set_active_camera("/World/Go2/Head_upper/Go2Camera")  

@@ -30,7 +30,7 @@ Architecture:
   Scene setup    → scene.py
   Camera/view    → cameras.py
   OmniGraphs     → omnigraphs.py
-  UI panel       → ui_extension_example.py
+  UI panel       → ui_extension.py
   This file      → orchestration, keyboard input, physics callbacks, autopilot
 """
 
@@ -176,7 +176,7 @@ class Go2ArmExample(BaseSample):
             
 
             # Write telemetry for UI display
-            import ui_extension_example
+            import ui_extension
             from pxr import UsdGeom, Usd
             ball_prim = omni.usd.get_context().get_stage().GetPrimAtPath("/World/ball/Tennis_ball_01/ball")
             robot_prim = omni.usd.get_context().get_stage().GetPrimAtPath("/World/Go2/base")
@@ -216,15 +216,15 @@ class Go2ArmExample(BaseSample):
                 dx = ball_tf[0] - robot_tf[0]
                 dy = ball_tf[1] - robot_tf[1]
                 dz = ball_tf[2] - robot_tf[2]
-                ui_extension_example._telemetry_offset = f"({dx:.3f}, {dy:.3f}, {dz:.3f})"
-                ui_extension_example._dist_xy = f"({dist_xy:.1f} m)"
+                ui_extension._telemetry_offset = f"({dx:.3f}, {dy:.3f}, {dz:.3f})"
+                ui_extension._dist_xy = f"({dist_xy:.1f} m)"
 
-                ui_extension_example._robot_yaw = f"({robot_yaw:.1f} deg)"
-                ui_extension_example._target_yaw = f"({target_yaw:.1f} deg)"
-                ui_extension_example._yaw_error = f"({yaw_error:.1f} deg)"
+                ui_extension._robot_yaw = f"({robot_yaw:.1f} deg)"
+                ui_extension._target_yaw = f"({target_yaw:.1f} deg)"
+                ui_extension._yaw_error = f"({yaw_error:.1f} deg)"
 
-                #print(f"[Go2Arm] Ball offset: {ui_extension_example._telemetry_offset}")
-                ui_extension_example._telemetry_command = (
+                #print(f"[Go2Arm] Ball offset: {ui_extension._telemetry_offset}")
+                ui_extension._telemetry_command = (
                     f"[{self._merged_command[0]:.3f}, "
                     f"{self._merged_command[1]:.3f}, "
                     f"{self._merged_command[2]:.3f}, "
@@ -239,12 +239,12 @@ class Go2ArmExample(BaseSample):
 
             self.go2.forward(step_size, self._merged_command)
         else:
-            self._physics_ready = True
             self.go2.initialize(physics_sim_view="/World/go2")
-            print(f"[Go2Arm] Go2 articulation bodies: {self.go2.robot.get_articulation_body_count()}")
             self.go2.post_reset()
             self.go2.robot.set_joints_default_state(self.go2.default_pos)
-            self.arm.initialize()
+            # Arm is controlled via OmniGraph subscriptions, so a tensor articulation
+            # handle is not required here and can fail for non-homogeneous roots.
+            self._physics_ready = True
 
     def _sub_keyboard_event(self, event, *args, **kwargs) -> bool:
         """Keyboard event subscriber: accumulates on press, releases on key-up."""
@@ -286,7 +286,7 @@ class Go2ArmExample(BaseSample):
     # --------------- autopilot toggle ---------------
     @property
     def autopilot_enabled(self):
-        from ui_extension_example import autopilot_enabled
+        from ui_extension import autopilot_enabled
         return autopilot_enabled
 
     def _compute_ball_follow_command(self) -> None:

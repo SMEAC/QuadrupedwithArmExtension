@@ -21,7 +21,7 @@ from typing import Optional
 import numpy as np
 from isaacsim.core.utils.rotations import quat_to_rot_matrix
 from isaacsim.core.utils.types import ArticulationAction
-from isaacsim.robot.policy.examples.controllers import PolicyController
+from ..controllers import PolicyControllerGo2
 from isaacsim.storage.native import get_assets_root_path
 
 
@@ -30,7 +30,7 @@ def _get_extension_root() -> str:
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-class Go2withPitchFlatTerrainPolicy(PolicyController):
+class Go2withPitchFlatTerrainPolicy(PolicyControllerGo2):
     """Go2 quadruped policy controller with base pitch and yaw control.
 
     This controller runs a learned locomotion policy on a Unitree Go2 robot.
@@ -103,6 +103,8 @@ class Go2withPitchFlatTerrainPolicy(PolicyController):
         gravity_b = np.matmul(R_BI, np.array([0.0, 0.0, -1.0]))
 
         obs = np.zeros(50)
+        leg_indices = getattr(self, "leg_dof_indices", np.arange(12))
+        leg_default_pos = getattr(self, "leg_default_pos", np.asarray(self.default_pos)[leg_indices])
         # Base linear velocity (body frame)
         obs[:3] = lin_vel_b
         # Base angular velocity (body frame)
@@ -112,10 +114,10 @@ class Go2withPitchFlatTerrainPolicy(PolicyController):
         # Command (v_x, v_y, pitch, yaw_rate, roll_rate)
         obs[9:14] = command
         # Joint positions (relative to default)
-        current_joint_pos = self.robot.get_joint_positions()[:12]
-        obs[14:26] = current_joint_pos - self.default_pos
+        current_joint_pos = self.robot.get_joint_positions()[leg_indices]
+        obs[14:26] = current_joint_pos - leg_default_pos
         # Joint velocities
-        current_joint_vel = self.robot.get_joint_velocities()[:12]
+        current_joint_vel = self.robot.get_joint_velocities()[leg_indices]
         obs[26:38] = current_joint_vel
         # Previous action
         obs[38:50] = self._previous_action
@@ -135,8 +137,10 @@ class Go2withPitchFlatTerrainPolicy(PolicyController):
             self._previous_action = self.action.copy()
 
         # Build the 12-element target positions for the Go2 leg joints only
-        leg_positions = self.default_pos + (self.action * self._action_scale)
-        action = ArticulationAction(joint_positions=leg_positions, joint_indices=np.arange(12))
+        leg_default_pos = getattr(self, "leg_default_pos", np.asarray(self.default_pos)[np.arange(12)])
+        leg_positions = leg_default_pos + (self.action * self._action_scale)
+        leg_indices = getattr(self, "leg_dof_indices", np.arange(12))
+        action = ArticulationAction(joint_positions=leg_positions, joint_indices=leg_indices)
         self.robot.apply_action(action)
 
         self._policy_counter += 1
