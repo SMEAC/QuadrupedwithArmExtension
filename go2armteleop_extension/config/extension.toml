@@ -28,4 +28,4 @@ support_level = "User"
 name = "go2armteleop_extension"
 
 [[python.module]]
-name = "ui_extension_example"
+name = "ui_extension"

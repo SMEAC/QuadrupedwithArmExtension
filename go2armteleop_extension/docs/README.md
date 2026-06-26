@@ -33,11 +33,11 @@ There are two ways to install this extension:
 ### Option A: Place in Isaac Sim's user extensions directory (simplest)
 
 ```bash
-mkdir -p ~/go2withArmExtension
+mkdir -p ~/QuadrupedwithArmExtension
 
 # Copy this extension into Isaac Sim's user extension directory
-cp -r ~/go2withArmExtension \
-  /home/gavin/IsaacSim/source/isaacsim-user/exts/
+cp -r ~/QuadrupedwithArmExtension \
+  ~/IsaacSim/source/isaacsim-user/exts/
 ```
 
 > **Tip:** If your Isaac Sim is installed elsewhere, find the correct path by going to **Edit > Preferences > Extensions > Extension Search Path** in Isaac Sim. Each extension must live in its own subdirectory.
@@ -47,7 +47,7 @@ cp -r ~/go2withArmExtension \
 ```bash
 # Point Isaac Sim at your extension directory on launch
 ./isaac-sim.sh -v \
-  --ext-folder /home/gavin/IsaacSim/source/isaacsim-user/exts/go2withArmExtension
+  --ext-folder ~/IsaacSim/source/isaacsim-user/exts/QuadrupedwithArmExtension
 ```
 
 ## Activating the Extension
@@ -68,14 +68,14 @@ Start Isaac Sim with the extension enabled:
 
 ```bash
 ./isaac-sim.sh -v \
-  --ext-folder /home/gavin/go2withArmExtension \
+  --ext-folder /home/gavin/QuadrupedwithArmExtension \
   --exts/go2armteleop_extension.enable=1
 ```
 
 Or via environment variable:
 
 ```bash
-export OMNI_KIT_EXTENSIONS_PATH=/home/gavin/go2withArmExtension
+export OMNI_KIT_EXTENSIONS_PATH=~/QuadrupedwithArmExtension
 ./isaac-sim.sh -v
 ```
 
@@ -97,7 +97,7 @@ self.policy_config_path = "/path/to/your/env.yaml"  # Policy environment config
 Edit `go2armteleop.py` (`Go2ArmExample.__init__`, ~line 110):
 
 ```python
-self.arm_usd_path = "/path/to/open_manipulator_x.usd"   # Path to your OpenManipulator-X USD
+self.arm_usd_path = "/path/to/open_manipulator_x.usda"   # Path to your OpenManipulator-X USD
 self.arm_position = np.array([0.2, 0.0, 0.07])           # Position of arm on the Go2 base
 ```
 
@@ -176,7 +176,6 @@ go2withArmExtension/
 │   ├── Gripper_Ball.usda         # Gripper asset (v1)
 │   ├── Gripper_Ball_v2.usda      # Gripper asset (v2)
 │   ├── Gripper_Ball_v2.STL       # Gripper mesh source
-│   ├── gripperTest.usd           # Gripper test asset
 │   └── openManipulator/          # Arm configs + meshes
 └── LICENSE
 ```
