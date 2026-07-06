@@ -181,9 +181,105 @@ def create_ball(
             print(f"[Go2Arm] Warning: failed to set ball position: {e}")
     else:
         print(f"[Go2Arm] Warning: ball prim not found at {ball_prim_path}")
-    
-    
+
     return ball_prim_path
+
+
+# ── Runtime ball velocity (updated from UI) ────────────────────────────────
+
+_ball_velocity_prim = None  # cached RigidBodyAPI reference
+
+
+def set_ball_velocity(vx: float, vy: float, vz: float):
+    """Apply linear velocity to the ball prim at runtime.
+
+    Called from the UI panel's "Set Ball Vel" button.  Tries multiple
+    candidate paths for the ball prim (reference root / nested geometry).
+
+    Args:
+        vx: Velocity along X axis (m/s).
+        vy: Velocity along Y axis (m/s).
+        vz: Velocity along Z axis (m/s).
+    """
+    global _ball_velocity_prim
+    print(f"[Go2Arm] Setting ball velocity to ({vx}, {vy}, {vz})")
+    stage = omni.usd.get_context().get_stage()
+    if not stage:
+        print("[Go2Arm] Ball vel: no USD stage (scene not loaded?)")
+        return
+
+    # Try several candidate paths for the ball's rigid-body prim.
+    candidates = [
+        #"/World/ball",
+        "/World/ball/Tennis_ball_01",
+        #"/World/ball/Tennis_ball_01/ball",
+    ]
+    ball_prim = None
+    for path in candidates:
+        ball_prim = stage.GetPrimAtPath(path)
+        if ball_prim and ball_prim.IsValid():
+            break
+
+    if not ball_prim:
+        print(f"[Go2Arm] Ball vel: ball prim not found at any candidate path")
+        return
+
+    if not _ball_velocity_prim:
+        _ball_velocity_prim = UsdPhysics.RigidBodyAPI(ball_prim)
+
+    if _ball_velocity_prim:
+        try:
+            _ball_velocity_prim.GetVelocityAttr().Set(Gf.Vec3f(vx, vy, vz))
+            print(f"[Go2Arm] Ball velocity set: ({vx}, {vy}, {vz})")
+        except Exception as e:
+            print(f"[Go2Arm] Warning: failed to set ball velocity: {e}")
+    else:
+        print(f"[Go2Arm] Ball vel: RigidBodyAPI not available on {ball_prim.GetPath()}")
+
+
+# ── Runtime ball position (updated from UI) ──────────────
+
+_ball_position_prim = None  # cached XFormCommonAPI reference
+
+
+def set_ball_position(x: float, y: float, z: float) -> str:
+    """Move the ball prim to the given XYZ coordinates at runtime.
+
+    Returns a status message describing what happened.
+    """
+    global _ball_position_prim
+
+    stage = omni.usd.get_context().get_stage()
+    if not stage:
+        return "Ball pos: no USD stage"
+
+    candidates = [
+        "/World/ball",
+        "/World/ball/Tennis_ball_01",
+        "/World/ball/Tennis_ball_01/ball",
+    ]
+    ball_prim = None
+    for path in candidates:
+        ball_prim = stage.GetPrimAtPath(path)
+        if ball_prim and ball_prim.IsValid():
+            break
+
+    if not ball_prim:
+        return "Ball pos: ball prim not found"
+
+    if not _ball_position_prim:
+        xformable = _find_xformable_prim(ball_prim)
+        if xformable:
+            _ball_position_prim = UsdGeom.XformCommonAPI(xformable)
+
+    if _ball_position_prim:
+        try:
+            _ball_position_prim.SetTranslate(Gf.Vec3d(x, y, z))
+            return f"Ball pos: ({x:.3f}, {y:.3f}, {z:.3f})"
+        except Exception as e:
+            return f"Ball pos: failed to set translate: {e}"
+    else:
+        return "Ball pos: no xformable prim found"
 
 
 def create_mat(
@@ -612,8 +708,10 @@ def setup_scene(
                               offset=np.array([0.15, -0.045, 0.045]), 
                               rot=np.array([-90.0, 0.0, 90.0]))
     # Tennis ball
-    ball_prim_path = create_ball(stage, ball_prim_path="/World/ball", position=np.array([2.0, 1.0, 1.5]))
-
+    #rng = np.random.default_rng(seed=42) 
+    rng = np.random.default_rng() 
+    ball_prim_path = create_ball(stage, ball_prim_path="/World/ball", position=np.array([(3.0*rng.random()-0.5), 3.0*(rng.random()-0.5), 1.5]))
+    set_ball_velocity(1.0,1.0,1.0)  # Initial velocity for the ball
     # Objects
     basket_prim_path = create_basket(stage, basket_prim_path="/World/basket", position=np.array([2.0, -1.0, 0.5]))
 

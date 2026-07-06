@@ -3,11 +3,16 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import sys
+
 import omni.ext
+import omni.graph.core as og
+import omni.ui as ui
 from pxr import Usd
 from isaaclab_assets.robots.unitree import UNITREE_GO2_CFG  # isort: skip
 import numpy as np
 from pxr import UsdGeom, Sdf, Gf, UsdPhysics
+import carb
 
 # Module-level flag shared with Go2ArmExample for autopilot toggle
 autopilot_enabled = False
@@ -82,6 +87,17 @@ class ExampleExtension(omni.ext.IExt):
         print("[quadruped_go2_locomotion] startup")
 
         self._count = 0
+        self._vla_command_value = "go to green mat"
+        self._vla_graph_attr_path = "/VLACommandGraph/ros2_publisher_VLA.inputs:data"
+        self._vla_graph_attr_candidates = [
+            "/VLACommandGraph/ros2_publisher_VLA.inputs:data",
+            "/VLACommandGraph/ros2_publisher_VLA.inputs:text",
+            "/VLACommandGraph/ros2_publisher_VLA.inputs:message",
+            "/VLACommandGraph/ros2_publisher_VLA.inputs:string",
+        ]
+        self._vla_graph_attr = None
+        self._vla_graph_warned = False
+        self._vla_field_model = ui.SimpleStringModel(self._vla_command_value)
 
         # Hardcoded S3 path for the Unitree GO2 robot
         self._usd_path = (
@@ -170,6 +186,119 @@ class ExampleExtension(omni.ext.IExt):
                         else:
                             label.text = "USD path not found in config."
                         '''
+                    def on_set_ball_vel():
+                        x = self._ball_vel_x.model.get_value_as_float()
+                        y = self._ball_vel_y.model.get_value_as_float()
+                        z = self._ball_vel_z.model.get_value_as_float()
+                        scene_mod = sys.modules.get("scene")
+                        if scene_mod and hasattr(scene_mod, "set_ball_velocity"):
+                            scene_mod.set_ball_velocity(x, y, z)
+                            self._ball_vel_label.text = f"Ball Vel: {x}, {y}, {z}"
+                        else:
+                            self._ball_vel_label.text = "Ball vel: scene not ready"
+
+
+                    def on_viewport_mouse_click(self, x: float, y: float, button: int):
+                            # We only care about the Left Mouse Button (typically button code 0)
+                            if button != 0:
+                                return
+
+                            # 3. Get the active viewport API object
+                            viewport_api = omni.kit.viewport.utility.get_active_viewport()
+                            if not viewport_api:
+                                return
+
+                            # 4. Convert the 2D window coordinates (x, y) into a 3D ray
+                            # This returns an (origin, direction) tuple of carb.Float3 objects
+                            ray_origin, ray_dir = viewport_api.get_ray_from_screen_x_y(x, y)
+
+                            # 5. Perform the PhysX Raycast into the stage
+                            max_distance = 10000.0  # Adjust based on scene scale
+                            hit = get_physx_scene_query_interface().raycast_closest(ray_origin, ray_dir, max_distance)
+
+                            if hit["hit"]:
+                                # 6. Retrieve the exact surface coordinate!
+                                surface_xyz = hit["position"]  # Tuple of (X, Y, Z)
+                                prim_path = hit["rigid_body"]   # The path of the hit object
+                                
+                                print(f"Clicked on Object: {prim_path}")
+                                print(f"Surface Coordinate: {surface_xyz}")
+                                
+                                # Forward the coordinates to your ball placement function
+                                self.on_place_ball(surface_xyz)
+                            else:
+                                print("Clicked, but the ray did not hit any colliders.")
+
+                    def setup_mouse_listener():
+                        # 1. Get the active viewport window and its underlying UI frame
+                        viewport_window = omni.kit.viewport.utility.get_active_viewport_window()
+                        if not viewport_window:
+                            print("No active viewport window found!")
+                            return
+                            
+                        self._viewport_frame = viewport_window.get_frame("MyViewportOverlay")
+                        
+                        # 2. Register a mouse pressed event listener on the viewport frame
+                        # This will trigger 'on_viewport_mouse_click' whenever the user clicks
+                        self._mouse_sub = self._viewport_frame.set_mouse_pressed_fn(on_viewport_mouse_click)
+
+                    def on_place_ball():
+                        """Raycast from camera center and place ball at surface + [0,0,0.5].
+
+                        Uses the modern viewport → camera-path → USD-transform pattern:
+                        1. get_active_viewport_camera_path()  →  Sdf.Path
+                        2. stage.GetPrimAtPath(camera_path)    →  camera prim
+                        3. Xformable(camera_prim).ComputeLocalToWorldTransform()  →  Gf.Matrix4d
+                        4. ExtractTranslation / ExtractRotation  →  position + direction
+                        """
+                        import omni.kit.viewport.utility
+                        from omni.physx import get_physx_interface
+                        from omni.physx import get_physx_scene_query_interface
+
+                        camera_path = omni.kit.viewport.utility.get_active_viewport_camera_path()
+                        if not camera_path:
+                            self._ball_vel_label.text = "Place Ball: no camera path"
+                            return
+
+                        stage = omni.usd.get_context().get_stage()
+                        camera_prim = stage.GetPrimAtPath(camera_path)
+                        if not camera_prim or not camera_prim.IsValid():
+                            self._ball_vel_label.text = "Place Ball: camera prim not found"
+                            return
+
+                        # Camera world-space position and direction
+                        xformable = UsdGeom.Xformable(camera_prim)
+                        world_mat = xformable.ComputeLocalToWorldTransform(Usd.TimeCode.Default())
+                        camera_pos = world_mat.ExtractTranslation()          # Gf.Vec3d
+
+                        # Extract the upper-left 3x3 rotation matrix from the 4x4 transform
+                        rot_mat = Gf.Matrix3d(
+                            world_mat[0][0], world_mat[0][1], world_mat[0][2],
+                            world_mat[1][0], world_mat[1][1], world_mat[1][2],
+                            world_mat[2][0], world_mat[2][1], world_mat[2][2],
+                        )
+
+                        # Transform camera's forward axis (-Z in camera local space) into world space
+                        forward = Gf.Vec3d(0, 0, -1)
+                        camera_dir = rot_mat * forward                        # Gf.Vec3d
+
+                        #physx_interface = get_physx_interface()
+                        #hit = physx_interface.raycast(camera_pos, camera_dir, max_dist=1000.0)
+                        origin = carb.Float3(camera_pos[0], camera_pos[1], camera_pos[2])
+                        rayDir = carb.Float3(camera_dir[0], camera_dir[1], camera_dir[2])
+                        distance = 1000.0
+                        hit = get_physx_scene_query_interface().raycast_closest(origin, rayDir, distance)
+                        #hit = get_physx_scene_query_interface().raycast_closest(camera_pos, camera_dir, max_dist=1000.0)
+                        if hit["hit"]:
+                            print(f"[Go2Arm] Raycast hit at {hit['position']}, normal {hit['normal']}")
+                            surface_xyz = hit["position"]
+                            new_pos = [surface_xyz.x, surface_xyz.y, surface_xyz.z + 0.5]
+                            import scene
+                            scene.set_ball_position(new_pos[0], new_pos[1], new_pos[2])
+                            self._ball_vel_label.text = f"Ball pos: {new_pos[0]:.2f}, {new_pos[1]:.2f}, {new_pos[2]:.2f}"
+                        else:
+                            self._ball_vel_label.text = "Place Ball: no hit"
+                            print("[Go2Arm] Raycast did not hit any surface.")
 
                     def on_reset():
                         self._count = 0
@@ -188,14 +317,34 @@ class ExampleExtension(omni.ext.IExt):
                         omni.ui.Button("Show Config", clicked_fn=on_debug_hierarchy)
                         with omni.ui.HStack():
                             omni.ui.Button("Autopilot", clicked_fn=toggle_autopilot)
+                            #omni.ui.Button("Place Ball", clicked_fn=setup_mouse_listener)
+                            omni.ui.Button("Set Ball Vel", clicked_fn=on_set_ball_vel)
+
+
 
                     # Telemetry labels — live updated via update event stream
-                    self._telemetry_offset_label = omni.ui.Label("Ball Offset: N/A")
-                    self._telemetry_command_label = omni.ui.Label("Command: N/A")
-                    self._robot_yaw_label = omni.ui.Label("Robot Yaw: N/A")
-                    self._target_yaw_label = omni.ui.Label("Target Yaw: N/A")
-                    self._yaw_error_label = omni.ui.Label("Yaw Error: N/A")
-                    self._dist_xy_label = omni.ui.Label("Distance XY: N/A")
+                    with omni.ui.CollapsableFrame("Stats", style={"header_background_color": (0.2, 0.6, 0.8)}):
+                        with omni.ui.VStack():
+                            self._telemetry_offset_label = omni.ui.Label("Ball Offset: N/A")
+                            self._telemetry_command_label = omni.ui.Label("Command: N/A")
+                            self._robot_yaw_label = omni.ui.Label("Robot Yaw: N/A")
+                            self._target_yaw_label = omni.ui.Label("Target Yaw: N/A")
+                            self._yaw_error_label = omni.ui.Label("Yaw Error: N/A")
+                            self._dist_xy_label = omni.ui.Label("Distance XY: N/A")
+                            # Ball velocity controls (collapsible to save space)
+                            self._ball_vel_label = omni.ui.Label("")
+
+
+
+                    with omni.ui.CollapsableFrame("Ball Velocity", style={"header_background_color": (0.2, 0.6, 0.8)}):
+                        with omni.ui.VStack():
+                            with omni.ui.HStack():
+                                omni.ui.Label("X:", width=16)
+                                self._ball_vel_x = ui.FloatField(ui.SimpleFloatModel(0.0), width=50)
+                                omni.ui.Label("Y:", width=16)
+                                self._ball_vel_y = ui.FloatField(ui.SimpleFloatModel(0.0), width=50)
+                                omni.ui.Label("Z:", width=16)
+                                self._ball_vel_z = ui.FloatField(ui.SimpleFloatModel(0.0), width=50)
 
                     def _update_telemetry_labels():
                         self._telemetry_offset_label.text = f"Ball Offset: {_telemetry_offset}"
@@ -213,5 +362,44 @@ class ExampleExtension(omni.ext.IExt):
                         name="telemetry_update",
                     )
 
+                    def _publish_vla_command():
+                        self._vla_command_value = self._vla_field_model.get_value_as_string()
+                        try:
+                            if self._vla_graph_attr is None:
+                                for attr_path in self._vla_graph_attr_candidates:
+                                    try:
+                                        self._vla_graph_attr = og.Controller().attribute(attr_path)
+                                        self._vla_graph_attr_path = attr_path
+                                        self._vla_graph_warned = False
+                                        break
+                                    except Exception:
+                                        self._vla_graph_attr = None
+
+                            # Graph may not exist yet (e.g. before scene/omnigraph setup).
+                            if self._vla_graph_attr is None:
+                                return
+
+                            self._vla_graph_attr.set(self._vla_command_value)
+                        except Exception as exc:
+                            self._vla_graph_attr = None
+                            if not self._vla_graph_warned:
+                                print(f"[quadruped_go2_locomotion] Warning: unable to set VLA graph input: {exc}")
+                                self._vla_graph_warned = True
+
+                    self._vla_update_subscription = _event_stream.create_subscription_to_pop(
+                        lambda event: _publish_vla_command(),
+                        name="vla_command_publish",
+                    )
+
+                    with omni.ui.CollapsableFrame("VLA Command", style={"header_background_color": (0.6, 0.4, 0.2)}):
+                        with omni.ui.VStack():
+                            omni.ui.Label("ROS2 topic: VLA_Command")
+                            self._vla_command_field = ui.StringField(self._vla_field_model, width=360)
+
     def on_shutdown(self):
+        if getattr(self, "_vla_update_subscription", None) is not None:
+            self._vla_update_subscription = None
+        if getattr(self, "_telemetry_subscription", None) is not None:
+            self._telemetry_subscription = None
+        self._vla_graph_attr = None
         print("[quadruped_go2_locomotion] shutdown")

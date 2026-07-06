@@ -328,6 +328,36 @@ def _create_camera_quadruped_graph(controller: og.Controller, camera_quad_prim: 
     )
     return controller
 
+def _create_VLA_command_graph(controller: og.Controller) -> og.Controller:
+    """Create the VLA command string ROS2 publish OmniGraph.
+
+    Args:
+        controller: The omni.graph.Controller instance.
+
+    Returns:
+        The controller for chaining (same instance).
+    """
+    keys = og.Controller.Keys
+    controller.edit(
+        {"graph_path": "/VLACommandGraph", "evaluator_name": "execution"},
+        {
+            keys.CREATE_NODES: [
+                ("OnPlaybackTickVLA", "omni.graph.action.OnPlaybackTick"),
+                ("ros2_publisher_VLA", "isaacsim.ros2.bridge.ROS2Publisher"),
+                ("Ros2Context_VLA", "isaacsim.ros2.bridge.ROS2Context"),
+            ],
+            keys.SET_VALUES: [
+                ("ros2_publisher_VLA.inputs:messageName", "String"),
+                ("ros2_publisher_VLA.inputs:messagePackage", "std_msgs"),
+                ("ros2_publisher_VLA.inputs:topicName", "VLA_Command"),
+            ],
+            keys.CONNECT: [
+                ("OnPlaybackTickVLA.outputs:tick", "ros2_publisher_VLA.inputs:execIn"),
+                ("Ros2Context_VLA.outputs:context", "ros2_publisher_VLA.inputs:context"),
+            ],
+        },
+    )
+    return controller
 
 def _create_clock_graph(controller: og.Controller) -> og.Controller:
     """Create the simulation clock ROS2 publish OmniGraph.
@@ -393,6 +423,7 @@ def setup_omnigraphs(
     _create_camera_arm_graph(controller, camera_arm.prim_path)
     _create_camera_quadruped_graph(controller, camera_quadruped.prim_path)
     _create_clock_graph(controller)
+    _create_VLA_command_graph(controller)
 
     # Return metadata for the physics callback to access cmd_vel outputs
     return {
@@ -407,4 +438,5 @@ def setup_omnigraphs(
         "cmdvel_autopilot_angular_y": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:angular:y",
         "cmdvel_autopilot_angular_x": "/CMDVELAutopilotGraph/ros2_publisher_autopilot.inputs:angular:x",
         "cmdvel_autopilot_impulse": "/CMDVELAutopilotGraph/Impulse_autopilot.state:enableImpulse",
+        "vla_command": "/VLACommandGraph/ros2_publisher_VLA.inputs:data",
     }
